@@ -23,7 +23,11 @@ dependencies:
     sdk: flutter
   webview_flutter_android: ^4.7.0
   webview_flutter_platform_interface: ^2.13.0
-  webview_flutter_wkwebview: ^3.22.0
+  webview_flutter_wkwebview:
+    git:
+      url: https://github.com/canarymail/flutter-packages.git
+      path: packages/webview_flutter/webview_flutter_wkwebview
+      ref: main
 
 dev_dependencies:
   build_runner: ^2.1.5
