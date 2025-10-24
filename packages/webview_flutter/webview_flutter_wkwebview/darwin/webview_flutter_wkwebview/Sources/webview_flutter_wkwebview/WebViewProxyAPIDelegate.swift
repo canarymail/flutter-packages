@@ -15,6 +15,10 @@ class WebViewImpl: WKWebView {
     self.api = api
     self.registrar = registrar
     super.init(frame: frame, configuration: configuration)
+
+    // Set drawsBackground to false for transparent background
+    self.setValue(false, forKey: "drawsBackground")
+
     #if os(iOS)
       scrollView.contentInsetAdjustmentBehavior = .never
       scrollView.automaticallyAdjustsScrollIndicatorInsets = false
