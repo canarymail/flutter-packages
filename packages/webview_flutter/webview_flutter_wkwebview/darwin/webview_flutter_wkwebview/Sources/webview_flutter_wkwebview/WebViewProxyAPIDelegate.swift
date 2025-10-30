@@ -24,6 +24,11 @@ class WebViewImpl: WKWebView {
     #if os(iOS)
       scrollView.contentInsetAdjustmentBehavior = .never
       scrollView.automaticallyAdjustsScrollIndicatorInsets = false
+      scrollView.isScrollEnabled = false
+      scrollView.showsVerticalScrollIndicator = false
+      scrollView.showsHorizontalScrollIndicator = false
+      scrollView.bounces = false
+      scrollView.delegate = self
     #endif
   }
 
