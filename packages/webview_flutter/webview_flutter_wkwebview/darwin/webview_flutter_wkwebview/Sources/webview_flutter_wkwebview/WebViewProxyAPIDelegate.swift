@@ -403,3 +403,9 @@ class WebViewProxyAPIDelegate: PigeonApiDelegateWKWebView, PigeonApiDelegateUIVi
       pigeonApi: getUIViewWKWebViewAPI(pigeonApi), pigeonInstance: pigeonInstance, allow: allow)
   }
 }
+
+#if os(iOS)
+extension WebViewImpl: UIScrollViewDelegate {
+  // Add any UIScrollViewDelegate methods you need here
+}
+#endif
