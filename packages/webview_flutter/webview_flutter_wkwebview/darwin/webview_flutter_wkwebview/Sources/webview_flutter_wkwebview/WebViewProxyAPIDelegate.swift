@@ -65,15 +65,22 @@ class WebViewImpl: WKWebView {
     }
   }
 
-  private func sendWindowInteractionEvent() {
-    guard let window = self.window else { return }
+  private func sendMouseMovedIntoWebView() {
+    guard
+    let window = self.window,
+    let contentView = window.contentView
+    else { return }
 
-    let location = NSEvent.mouseLocation
-    let point = window.convertPoint(fromScreen: location)
+    // Pick a point clearly inside the webview
+    let localPoint = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
+
+    // Convert WebView local → window → screen
+    let windowPoint = self.convert(localPoint, to: nil)
+    let screenPoint = window.convertPoint(toScreen: windowPoint)
 
     if let event = NSEvent.mouseEvent(
       with: .mouseMoved,
-      location: point,
+      location: screenPoint,
       modifierFlags: [],
       timestamp: ProcessInfo.processInfo.systemUptime,
       windowNumber: window.windowNumber,
