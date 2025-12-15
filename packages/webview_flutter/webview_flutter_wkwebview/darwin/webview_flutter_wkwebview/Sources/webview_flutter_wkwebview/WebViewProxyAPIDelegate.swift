@@ -19,6 +19,13 @@ class WebViewImpl: WKWebView {
     #if os(macOS)
         // Set drawsBackground to false for transparent background
         self.setValue(false, forKey: "drawsBackground")
+
+        NotificationCenter.default.addObserver(
+          self,
+          selector: #selector(handleFocusWebView),
+          name: Notification.Name("FocusWebView"),
+          object: nil
+        )
     #endif
 
     #if os(iOS)
@@ -29,6 +36,25 @@ class WebViewImpl: WKWebView {
       scrollView.showsHorizontalScrollIndicator = false
       scrollView.bounces = false
       scrollView.delegate = self
+    #endif
+  }
+
+  #if os(macOS)
+  @objc private func handleFocusWebView() {
+    guard let window = self.window else { return }
+
+    DispatchQueue.main.async {
+      window.makeFirstResponder(self)
+
+      // Optional but helps WebKit internal focus state
+      self.evaluateJavaScript("window.focus();", completionHandler: nil)
+    }
+  }
+  #endif
+
+  deinit {
+    #if os(macOS)
+    NotificationCenter.default.removeObserver(self)
     #endif
   }
 
