@@ -58,13 +58,38 @@ class WebViewImpl: WKWebView {
       print("[WebViewImpl] makeFirstResponder returned = \(didBecome)")
 
       print("[WebViewImpl] firstResponder AFTER = \(String(describing: window.firstResponder))")
-      print("[WebViewImpl] isFirstResponder AFTER = \(self == window.firstResponder)")
 
-      self.evaluateJavaScript("window.focus();") { _, error in
+      self.evaluateJavaScript("""
+    (function () {
+            const el =
+              document.activeElement &&
+              (document.activeElement.isContentEditable ||
+               document.activeElement.tagName === 'INPUT' ||
+               document.activeElement.tagName === 'TEXTAREA')
+                ? document.activeElement
+                : document.querySelector('[contenteditable], textarea, input');
+
+            if (!el) {
+              console.log('[focus] no editable element found');
+              return;
+            }
+
+            el.focus();
+
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+
+            console.log('[focus] caret activated');
+          })();
+  """) { _, error in
         if let error = error {
-          print("[WebViewImpl] ❌ window.focus() JS error: \(error)")
+          print("[WebViewImpl] ❌ caret JS error: \(error)")
         } else {
-          print("[WebViewImpl] ✅ window.focus() JS executed")
+          print("[WebViewImpl] ✅ caret JS executed")
         }
       }
     }
