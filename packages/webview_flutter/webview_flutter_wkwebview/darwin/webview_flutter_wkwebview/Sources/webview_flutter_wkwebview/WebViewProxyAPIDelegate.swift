@@ -60,36 +60,32 @@ class WebViewImpl: WKWebView {
       print("[WebViewImpl] firstResponder AFTER = \(String(describing: window.firstResponder))")
 
       self.evaluateJavaScript("""
-    (function () {
-            const el =
-              document.activeElement &&
-              (document.activeElement.isContentEditable ||
-               document.activeElement.tagName === 'INPUT' ||
-               document.activeElement.tagName === 'TEXTAREA')
-                ? document.activeElement
-                : document.querySelector('[contenteditable], textarea, input');
+  (function () {
+          const target = document.elementFromPoint(10, 10) || document.body;
 
-            if (!el) {
-              console.log('[focus] no editable element found');
-              return;
-            }
+          function fire(type) {
+            target.dispatchEvent(
+              new MouseEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: 10,
+                clientY: 10,
+                buttons: 1
+              })
+            );
+          }
 
-            el.focus();
-
-            const sel = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(el);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-
-            console.log('[focus] caret activated');
-          })();
-  """) { _, error in
+          fire('mousemove');
+          fire('mousedown');
+          fire('mouseup');
+          fire('mousemove');
+        })();
+""") { _, error in
         if let error = error {
-          print("[WebViewImpl] ❌ caret JS error: \(error)")
+          print("[WebViewImpl] ❌ fake mouse JS error: \(error)")
         } else {
-          print("[WebViewImpl] ✅ caret JS executed")
+          print("[WebViewImpl] 🖱 fake mouse events dispatched")
         }
       }
     }
