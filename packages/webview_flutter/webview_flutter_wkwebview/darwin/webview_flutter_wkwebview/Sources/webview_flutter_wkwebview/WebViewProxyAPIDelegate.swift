@@ -58,7 +58,7 @@ class WebViewImpl: WKWebView {
         self.evaluateJavaScript("document.activeElement?.focus();", completionHandler: nil)
 
         // 4. Optionally simulate click if still no cursor
-        self.simulateMouseClick()
+//        self.simulateMouseClick()
       }
     }
   }
