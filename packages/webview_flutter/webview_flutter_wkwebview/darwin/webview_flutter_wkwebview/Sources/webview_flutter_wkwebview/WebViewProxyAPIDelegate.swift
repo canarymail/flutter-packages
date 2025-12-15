@@ -61,7 +61,7 @@ class WebViewImpl: WKWebView {
 
       print("[WebViewImpl] firstResponder AFTER = \(String(describing: window.firstResponder))")
 
-      self.sendWindowInteractionEvent()
+      self.sendMouseMovedIntoWebView()
     }
   }
 
