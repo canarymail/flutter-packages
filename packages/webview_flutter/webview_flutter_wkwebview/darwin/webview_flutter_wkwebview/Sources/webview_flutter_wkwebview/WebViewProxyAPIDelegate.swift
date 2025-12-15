@@ -41,56 +41,60 @@ class WebViewImpl: WKWebView {
 
   #if os(macOS)
   @objc private func handleFocusWebView() {
-    print("[WebViewImpl] 🔔 handleFocusWebView called")
-
-    guard let window = self.window else {
-      print("[WebViewImpl] ❌ window is nil (webview not attached yet)")
-      return
-    }
+    guard let window = self.window else { return }
 
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
 
-      print("[WebViewImpl] ▶️ DispatchQueue.main")
+      // 1. Make first responder
+      window.makeFirstResponder(self)
 
-      print("[WebViewImpl] firstResponder BEFORE = \(String(describing: window.firstResponder))")
-      print("[WebViewImpl] isFirstResponder BEFORE = \(self === window.firstResponder)")
+      // 2. Force display update
+      self.setNeedsDisplay(self.bounds)
+      self.displayIfNeeded()
 
-      let didBecome = window.makeFirstResponder(self)
-      print("[WebViewImpl] makeFirstResponder returned = \(didBecome)")
+      // 3. Small delay then focus via JS
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        self.evaluateJavaScript("document.activeElement?.focus();", completionHandler: nil)
 
-      print("[WebViewImpl] firstResponder AFTER = \(String(describing: window.firstResponder))")
-
-      self.sendMouseMovedIntoWebView()
+        // 4. Optionally simulate click if still no cursor
+        self.simulateMouseClick()
+      }
     }
   }
 
-  private func sendMouseMovedIntoWebView() {
-    guard
-    let window = self.window,
-    let contentView = window.contentView
-    else { return }
+  private func simulateMouseClick() {
+    guard let window = self.window else { return }
 
-    // Pick a point clearly inside the webview
     let localPoint = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
-
-    // Convert WebView local → window → screen
     let windowPoint = self.convert(localPoint, to: nil)
-    let screenPoint = window.convertPoint(toScreen: windowPoint)
 
-    if let event = NSEvent.mouseEvent(
-      with: .mouseMoved,
-      location: screenPoint,
+    let downEvent = NSEvent.mouseEvent(
+      with: .leftMouseDown,
+      location: windowPoint,
       modifierFlags: [],
       timestamp: ProcessInfo.processInfo.systemUptime,
       windowNumber: window.windowNumber,
       context: nil,
       eventNumber: 0,
-      clickCount: 0,
+      clickCount: 1,
+      pressure: 1.0
+    )
+
+    let upEvent = NSEvent.mouseEvent(
+      with: .leftMouseUp,
+      location: windowPoint,
+      modifierFlags: [],
+      timestamp: ProcessInfo.processInfo.systemUptime + 0.01,
+      windowNumber: window.windowNumber,
+      context: nil,
+      eventNumber: 0,
+      clickCount: 1,
       pressure: 0
-    ) {
-      NSApp.sendEvent(event)
-    }
+    )
+
+    if let down = downEvent { self.mouseDown(with: down) }
+    if let up = upEvent { self.mouseUp(with: up) }
   }
   #endif
 
