@@ -41,13 +41,32 @@ class WebViewImpl: WKWebView {
 
   #if os(macOS)
   @objc private func handleFocusWebView() {
-    guard let window = self.window else { return }
+    print("[WebViewImpl] 🔔 handleFocusWebView called")
+
+    guard let window = self.window else {
+      print("[WebViewImpl] ❌ window is nil (webview not attached yet)")
+      return
+    }
 
     DispatchQueue.main.async {
-      window.makeFirstResponder(self)
+      print("[WebViewImpl] ▶️ DispatchQueue.main")
 
-      // Optional but helps WebKit internal focus state
-      self.evaluateJavaScript("window.focus();", completionHandler: nil)
+      print("[WebViewImpl] firstResponder BEFORE = \(String(describing: window.firstResponder))")
+      print("[WebViewImpl] isFirstResponder BEFORE = \(self == window.firstResponder)")
+
+      let didBecome = window.makeFirstResponder(self)
+      print("[WebViewImpl] makeFirstResponder returned = \(didBecome)")
+
+      print("[WebViewImpl] firstResponder AFTER = \(String(describing: window.firstResponder))")
+      print("[WebViewImpl] isFirstResponder AFTER = \(self == window.firstResponder)")
+
+      self.evaluateJavaScript("window.focus();") { _, error in
+        if let error = error {
+          print("[WebViewImpl] ❌ window.focus() JS error: \(error)")
+        } else {
+          print("[WebViewImpl] ✅ window.focus() JS executed")
+        }
+      }
     }
   }
   #endif
