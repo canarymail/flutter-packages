@@ -48,18 +48,20 @@ class WebViewImpl: WKWebView {
       return
     }
 
-    DispatchQueue.main.async {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+
       print("[WebViewImpl] ▶️ DispatchQueue.main")
 
       print("[WebViewImpl] firstResponder BEFORE = \(String(describing: window.firstResponder))")
-      print("[WebViewImpl] isFirstResponder BEFORE = \(self == window.firstResponder)")
+      print("[WebViewImpl] isFirstResponder BEFORE = \(self === window.firstResponder)")
 
       let didBecome = window.makeFirstResponder(self)
       print("[WebViewImpl] makeFirstResponder returned = \(didBecome)")
 
       print("[WebViewImpl] firstResponder AFTER = \(String(describing: window.firstResponder))")
 
-      sendWindowInteractionEvent()
+      self.sendWindowInteractionEvent()
     }
   }
 
