@@ -52,6 +52,11 @@ class WebViewImpl: WKWebView {
       // 2. Force display update
       self.setNeedsDisplay(self.bounds)
       self.displayIfNeeded()
+
+      // 3. Small delay then focus via JS
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        self.evaluateJavaScript("document.activeElement?.focus();", completionHandler: nil)
+      }
     }
   }
   #endif
