@@ -52,49 +52,7 @@ class WebViewImpl: WKWebView {
       // 2. Force display update
       self.setNeedsDisplay(self.bounds)
       self.displayIfNeeded()
-
-      // 3. Small delay then focus via JS
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-        self.evaluateJavaScript("document.activeElement?.focus();", completionHandler: nil)
-
-        // 4. Optionally simulate click if still no cursor
-//        self.simulateMouseClick()
-      }
     }
-  }
-
-  private func simulateMouseClick() {
-    guard let window = self.window else { return }
-
-    let localPoint = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
-    let windowPoint = self.convert(localPoint, to: nil)
-
-    let downEvent = NSEvent.mouseEvent(
-      with: .leftMouseDown,
-      location: windowPoint,
-      modifierFlags: [],
-      timestamp: ProcessInfo.processInfo.systemUptime,
-      windowNumber: window.windowNumber,
-      context: nil,
-      eventNumber: 0,
-      clickCount: 1,
-      pressure: 1.0
-    )
-
-    let upEvent = NSEvent.mouseEvent(
-      with: .leftMouseUp,
-      location: windowPoint,
-      modifierFlags: [],
-      timestamp: ProcessInfo.processInfo.systemUptime + 0.01,
-      windowNumber: window.windowNumber,
-      context: nil,
-      eventNumber: 0,
-      clickCount: 1,
-      pressure: 0
-    )
-
-    if let down = downEvent { self.mouseDown(with: down) }
-    if let up = upEvent { self.mouseUp(with: up) }
   }
   #endif
 
