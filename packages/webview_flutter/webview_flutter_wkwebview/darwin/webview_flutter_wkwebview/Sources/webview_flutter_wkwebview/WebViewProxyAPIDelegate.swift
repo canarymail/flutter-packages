@@ -59,35 +59,28 @@ class WebViewImpl: WKWebView {
 
       print("[WebViewImpl] firstResponder AFTER = \(String(describing: window.firstResponder))")
 
-      self.evaluateJavaScript("""
-  (function () {
-          const target = document.elementFromPoint(10, 10) || document.body;
+      sendWindowInteractionEvent()
+    }
+  }
 
-          function fire(type) {
-            target.dispatchEvent(
-              new MouseEvent(type, {
-                bubbles: true,
-                cancelable: true,
-                view: window,
-                clientX: 10,
-                clientY: 10,
-                buttons: 1
-              })
-            );
-          }
+  private func sendWindowInteractionEvent() {
+    guard let window = self.window else { return }
 
-          fire('mousemove');
-          fire('mousedown');
-          fire('mouseup');
-          fire('mousemove');
-        })();
-""") { _, error in
-        if let error = error {
-          print("[WebViewImpl] ❌ fake mouse JS error: \(error)")
-        } else {
-          print("[WebViewImpl] 🖱 fake mouse events dispatched")
-        }
-      }
+    let location = NSEvent.mouseLocation
+    let point = window.convertPoint(fromScreen: location)
+
+    if let event = NSEvent.mouseEvent(
+      with: .mouseMoved,
+      location: point,
+      modifierFlags: [],
+      timestamp: ProcessInfo.processInfo.systemUptime,
+      windowNumber: window.windowNumber,
+      context: nil,
+      eventNumber: 0,
+      clickCount: 0,
+      pressure: 0
+    ) {
+      NSApp.sendEvent(event)
     }
   }
   #endif
