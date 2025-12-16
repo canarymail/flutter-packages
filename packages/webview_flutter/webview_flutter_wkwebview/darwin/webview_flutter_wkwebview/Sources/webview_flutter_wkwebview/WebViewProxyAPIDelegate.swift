@@ -49,6 +49,10 @@ class WebViewImpl: WKWebView {
       // 1. Make first responder
       window.makeFirstResponder(self)
 
+      // 2. Force display update
+      self.setNeedsDisplay(self.bounds)
+      self.displayIfNeeded()
+
       // Restore selection if available, otherwise just focus
       self.evaluateJavaScript("""
             (function() {
