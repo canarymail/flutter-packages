@@ -26,6 +26,13 @@ class WebViewImpl: WKWebView {
           name: Notification.Name("FocusWebView"),
           object: nil
         )
+
+        NotificationCenter.default.addObserver(
+          self,
+          selector: #selector(handleWindowWillResignKey),
+          name: NSWindow.willResignKeyNotification,
+          object: nil
+        )
     #endif
 
     #if os(iOS)
@@ -55,9 +62,70 @@ class WebViewImpl: WKWebView {
 
       // 3. Small delay then focus via JS
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-        self.evaluateJavaScript("document.activeElement?.focus();", completionHandler: nil)
+        self.evaluateJavaScript("""
+  (function() {
+            const saved = window.__savedSelection;
+            if (!saved) {
+                document.activeElement?.focus();
+                return;
+            }
+
+            function getNodeFromPath(path) {
+              let node = document.body;
+              for (const index of path) {
+                if (!node.childNodes[index]) return null;
+                node = node.childNodes[index];
+              }
+              return node;
+            }
+
+            const startNode = getNodeFromPath(saved.startContainerPath);
+            const endNode = getNodeFromPath(saved.endContainerPath);
+            if (!startNode || !endNode) return;
+
+            const range = document.createRange();
+            range.setStart(startNode, saved.startOffset);
+            range.setEnd(endNode, saved.endOffset);
+
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          })();
+  """, completionHandler: nil)
       }
     }
+  }
+
+  @objc private func handleWindowWillResignKey() {
+    evaluateJavaScript("""
+  (function() {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return;
+
+        const range = sel.getRangeAt(0);
+        window.__savedSelection = {
+          startContainerPath: getNodePath(range.startContainer),
+          startOffset: range.startOffset,
+          endContainerPath: getNodePath(range.endContainer),
+          endOffset: range.endOffset
+        };
+
+        function getNodePath(node) {
+          const path = [];
+          while (node && node !== document.body) {
+            let index = 0;
+            let sibling = node;
+            while (sibling.previousSibling) {
+              sibling = sibling.previousSibling;
+              index++;
+            }
+            path.unshift(index);
+            node = node.parentNode;
+          }
+          return path;
+        }
+      })();
+  """, completionHandler: nil)
   }
   #endif
 
