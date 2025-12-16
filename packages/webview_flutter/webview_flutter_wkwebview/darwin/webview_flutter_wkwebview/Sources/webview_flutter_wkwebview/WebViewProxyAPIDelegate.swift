@@ -26,13 +26,6 @@ class WebViewImpl: WKWebView {
           name: Notification.Name("FocusWebView"),
           object: nil
         )
-
-        NotificationCenter.default.addObserver(
-          self,
-          selector: #selector(handleWindowWillResignKey),
-          name: NSWindow.willResignKeyNotification,
-          object: nil
-        )
     #endif
 
     #if os(iOS)
@@ -56,76 +49,174 @@ class WebViewImpl: WKWebView {
       // 1. Make first responder
       window.makeFirstResponder(self)
 
-      // 2. Force display update
-      self.setNeedsDisplay(self.bounds)
-      self.displayIfNeeded()
+      // Restore selection if available, otherwise just focus
+      self.evaluateJavaScript("""
+            (function() {
+                      // Try to restore saved selection
+                      if (window.__savedSelection) {
+                          const saved = window.__savedSelection;
+                          let element = null;
 
-      // 3. Small delay then focus via JS
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-        self.evaluateJavaScript("""
-  (function() {
-            const saved = window.__savedSelection;
-            if (!saved) {
-                document.activeElement?.focus();
-                return;
-            }
+                          // Try to find element by ID first
+                          if (saved.elementId) {
+                              element = document.getElementById(saved.elementId);
+                          }
 
-            function getNodeFromPath(path) {
-              let node = document.body;
-              for (const index of path) {
-                if (!node.childNodes[index]) return null;
-                node = node.childNodes[index];
-              }
-              return node;
-            }
+                          // Try by name
+                          if (!element && saved.elementName) {
+                              element = document.querySelector('[name="' + saved.elementName + '"]');
+                          }
 
-            const startNode = getNodeFromPath(saved.startContainerPath);
-            const endNode = getNodeFromPath(saved.endContainerPath);
-            if (!startNode || !endNode) return;
+                          // Try by path
+                          if (!element && saved.elementPath) {
+                              try {
+                                  element = document.querySelector(saved.elementPath);
+                              } catch(e) {
+                                  console.log('Could not find element by path:', e);
+                              }
+                          }
 
-            const range = document.createRange();
-            range.setStart(startNode, saved.startOffset);
-            range.setEnd(endNode, saved.endOffset);
+                          if (element) {
+                              element.focus();
 
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-          })();
-  """, completionHandler: nil)
-      }
+                              // Restore selection for input/textarea
+                              if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                                  try {
+                                      element.setSelectionRange(saved.startOffset, saved.endOffset);
+                                      console.log('Selection restored for input/textarea');
+                                      delete window.__savedSelection;
+                                      return;
+                                  } catch(e) {
+                                      console.log('Error restoring input selection:', e);
+                                  }
+                              }
+
+                              // Restore selection for contenteditable
+                              if (element.isContentEditable) {
+                                  try {
+                                      const range = document.createRange();
+                                      const textNode = element.firstChild || element;
+
+                                      const start = Math.min(saved.startOffset, textNode.textContent?.length || 0);
+                                      const end = Math.min(saved.endOffset, textNode.textContent?.length || 0);
+
+                                      range.setStart(textNode, start);
+                                      range.setEnd(textNode, end);
+
+                                      const selection = window.getSelection();
+                                      selection.removeAllRanges();
+                                      selection.addRange(range);
+
+                                      console.log('Selection restored for contenteditable');
+                                      delete window.__savedSelection;
+                                      return;
+                                  } catch(e) {
+                                      console.log('Error restoring contenteditable selection:', e);
+                                  }
+                              }
+
+                              // Clear saved selection even if restore failed
+                              delete window.__savedSelection;
+                              return;
+                          }
+                      }
+
+                      // No saved selection or restore failed - just focus
+                      let focusable = document.activeElement;
+                      if (!focusable || focusable === document.body) {
+                          focusable = document.querySelector('input, textarea, [contenteditable="true"]') || document.body;
+                      }
+                      focusable.focus();
+
+                      if (focusable.setSelectionRange) {
+                          focusable.setSelectionRange(0, 0);
+                      }
+                  })();
+        """, completionHandler: nil)
     }
   }
 
-  @objc private func handleWindowWillResignKey() {
+  override func resignFirstResponder() -> Bool {
+    print("[WebViewImpl] 🔄 resignFirstResponder called")
+
+    // Save selection before resigning
+    saveCurrentSelection()
+
+    return super.resignFirstResponder()
+  }
+
+  private func saveCurrentSelection() {
     evaluateJavaScript("""
-  (function() {
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
+        (function() {
+                const selection = window.getSelection();
+                const activeElement = document.activeElement;
 
-        const range = sel.getRangeAt(0);
-        window.__savedSelection = {
-          startContainerPath: getNodePath(range.startContainer),
-          startOffset: range.startOffset,
-          endContainerPath: getNodePath(range.endContainer),
-          endOffset: range.endOffset
-        };
+                // Handle input/textarea elements
+                if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+                    window.__savedSelection = {
+                        startOffset: activeElement.selectionStart || 0,
+                        endOffset: activeElement.selectionEnd || 0,
+                        elementTagName: activeElement.tagName,
+                        elementId: activeElement.id || null,
+                        elementName: activeElement.name || null,
+                        elementPath: getElementPath(activeElement)
+                    };
+                    console.log('Selection saved:', window.__savedSelection);
+                    return true;
+                }
 
-        function getNodePath(node) {
-          const path = [];
-          while (node && node !== document.body) {
-            let index = 0;
-            let sibling = node;
-            while (sibling.previousSibling) {
-              sibling = sibling.previousSibling;
-              index++;
-            }
-            path.unshift(index);
-            node = node.parentNode;
-          }
-          return path;
-        }
-      })();
-  """, completionHandler: nil)
+                // Handle contenteditable
+                if (activeElement && activeElement.isContentEditable && selection && selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    window.__savedSelection = {
+                        startOffset: range.startOffset,
+                        endOffset: range.endOffset,
+                        elementTagName: activeElement.tagName,
+                        elementId: activeElement.id || null,
+                        elementName: activeElement.name || null,
+                        elementPath: getElementPath(activeElement)
+                    };
+                    console.log('Selection saved:', window.__savedSelection);
+                    return true;
+                }
+
+                // No selection to save
+                delete window.__savedSelection;
+                return false;
+
+                function getElementPath(element) {
+                    if (element.id) {
+                        return '#' + element.id;
+                    }
+
+                    let path = [];
+                    while (element && element.nodeType === Node.ELEMENT_NODE) {
+                        let selector = element.nodeName.toLowerCase();
+                        if (element.className) {
+                            selector += '.' + element.className.trim().split(/\\s+/).join('.');
+                        }
+
+                        let sibling = element;
+                        let nth = 1;
+                        while (sibling.previousElementSibling) {
+                            sibling = sibling.previousElementSibling;
+                            if (sibling.nodeName.toLowerCase() === selector.split('.')[0]) {
+                                nth++;
+                            }
+                        }
+
+                        if (nth > 1) {
+                            selector += ':nth-of-type(' + nth + ')';
+                        }
+
+                        path.unshift(selector);
+                        element = element.parentElement;
+                    }
+
+                    return path.join(' > ');
+                }
+            })();
+    """, completionHandler: nil)
   }
   #endif
 
