@@ -85,13 +85,24 @@ class WebViewImpl: WKWebView, WKNavigationDelegate {
                 var sel = window.getSelection();
                 if (sel && sel.rangeCount > 0) {
                     try {
-                        window.savedSelection = sel.getRangeAt(0).cloneRange();
-                        console.log('[SelectionTracker] 💾 Selection saved');
+                        var range = sel.getRangeAt(0);
+
+                        // Only save if there's actual content/selection
+                        // Don't save if collapsed (just a cursor position with no selection)
+                        if (!range.collapsed || document.activeElement.isContentEditable ||
+                            document.activeElement.tagName === 'INPUT' ||
+                            document.activeElement.tagName === 'TEXTAREA') {
+
+                            window.savedSelection = range.cloneRange();
+                            console.log('[SelectionTracker] 💾 Selection saved, collapsed:', range.collapsed);
+                        } else {
+                            console.log('[SelectionTracker] ⏭️ Skipped saving collapsed selection on non-editable');
+                        }
                     } catch (e) {
                         console.log('[SelectionTracker] ❌ Error saving selection:', e);
                     }
                 } else {
-                    console.log('[SelectionTracker] ℹ️ No selection to save');
+                    console.log('[SelectionTracker] ℹ️ No selection to save (rangeCount: 0)');
                 }
             };
 
@@ -101,18 +112,18 @@ class WebViewImpl: WKWebView, WKNavigationDelegate {
                         var sel = window.getSelection();
                         sel.removeAllRanges();
                         sel.addRange(window.savedSelection);
-                        console.log('[SelectionTracker] ✅ Selection restored');
+                        console.log('[SelectionRestore] ✅ Selection restored');
                     } catch (e) {
-                        console.log('[SelectionTracker] ❌ Error restoring selection:', e);
+                        console.log('[SelectionRestore] ❌ Error restoring selection:', e);
                     }
                 } else {
-                    console.log('[SelectionTracker] ℹ️ No saved selection to restore');
+                    console.log('[SelectionRestore] ℹ️ No saved selection to restore');
                 }
             };
 
             // Save selection on blur
             document.addEventListener('blur', function(e) {
-                console.log('[SelectionTracker] 🔔 BLUR event fired');
+                console.log('[SelectionTracker] 🔔 BLUR event fired on:', e.target.tagName);
                 window.saveSelection();
             }, true);
 
