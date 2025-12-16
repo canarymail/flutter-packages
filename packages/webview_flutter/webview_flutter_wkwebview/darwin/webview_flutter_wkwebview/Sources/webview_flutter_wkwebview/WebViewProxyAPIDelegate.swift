@@ -276,17 +276,77 @@ class WebViewImpl: WKWebView, WKNavigationDelegate {
                                     if (element.isContentEditable) {
                                         console.log('[SelectionRestore] 📝 Restoring contenteditable selection');
                                         try {
+                                            // Find all text nodes in the element
+                                            function getTextNodes(node) {
+                                                const textNodes = [];
+
+                                                function walk(n) {
+                                                    if (n.nodeType === Node.TEXT_NODE) {
+                                                        textNodes.push(n);
+                                                    } else {
+                                                        for (let child of n.childNodes) {
+                                                            walk(child);
+                                                        }
+                                                    }
+                                                }
+
+                                                walk(node);
+                                                return textNodes;
+                                            }
+
+                                            const textNodes = getTextNodes(element);
+                                            console.log('[SelectionRestore] Found text nodes:', textNodes.length);
+
+                                            if (textNodes.length === 0) {
+                                                console.log('[SelectionRestore] ⚠️ No text nodes found');
+                                                delete window.__savedSelection;
+                                                return;
+                                            }
+
+                                            // Calculate cumulative position to find correct text node
+                                            let startNode = null, endNode = null;
+                                            let startNodeOffset = 0, endNodeOffset = 0;
+                                            let cumulativeLength = 0;
+
+                                            for (let i = 0; i < textNodes.length; i++) {
+                                                const node = textNodes[i];
+                                                const nodeLength = node.textContent.length;
+
+                                                // Find start position
+                                                if (startNode === null && cumulativeLength + nodeLength >= saved.startOffset) {
+                                                    startNode = node;
+                                                    startNodeOffset = saved.startOffset - cumulativeLength;
+                                                    console.log('[SelectionRestore] Start node found at index', i, 'offset:', startNodeOffset);
+                                                }
+
+                                                // Find end position
+                                                if (endNode === null && cumulativeLength + nodeLength >= saved.endOffset) {
+                                                    endNode = node;
+                                                    endNodeOffset = saved.endOffset - cumulativeLength;
+                                                    console.log('[SelectionRestore] End node found at index', i, 'offset:', endNodeOffset);
+                                                }
+
+                                                if (startNode && endNode) break;
+
+                                                cumulativeLength += nodeLength;
+                                            }
+
+                                            // Fallback to last text node if not found
+                                            if (!startNode) {
+                                                startNode = textNodes[textNodes.length - 1];
+                                                startNodeOffset = startNode.textContent.length;
+                                            }
+                                            if (!endNode) {
+                                                endNode = textNodes[textNodes.length - 1];
+                                                endNodeOffset = endNode.textContent.length;
+                                            }
+
+                                            console.log('[SelectionRestore] Final start offset:', startNodeOffset);
+                                            console.log('[SelectionRestore] Final end offset:', endNodeOffset);
+
                                             const range = document.createRange();
-                                            const textNode = element.firstChild || element;
-
-                                            const start = Math.min(saved.startOffset, textNode.textContent?.length || 0);
-                                            const end = Math.min(saved.endOffset, textNode.textContent?.length || 0);
-
-                                            console.log('[SelectionRestore] Adjusted start:', start);
-                                            console.log('[SelectionRestore] Adjusted end:', end);
-
-                                            range.setStart(textNode, start);
-                                            range.setEnd(textNode, end);
+                                            range.setStart(startNode, startNodeOffset);
+                                            range.setEnd(endNode, endNodeOffset);
 
                                             const selection = window.getSelection();
                                             selection.removeAllRanges();
