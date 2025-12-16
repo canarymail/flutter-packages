@@ -80,111 +80,43 @@ class WebViewImpl: WKWebView, WKNavigationDelegate {
 
             console.log('[SelectionTracker] 🚀 Script injected and running');
 
-            // Save selection whenever any input loses focus
-            document.addEventListener('blur', function(e) {
-                console.log('[SelectionTracker] 🔔 BLUR event fired');
-                console.log('[SelectionTracker] target:', e.target);
-                console.log('[SelectionTracker] target.tagName:', e.target.tagName);
-
-                const element = e.target;
-
-                // Handle input/textarea
-                if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                    console.log('[SelectionTracker] ✅ Input/Textarea detected');
-                    console.log('[SelectionTracker] selectionStart:', element.selectionStart);
-                    console.log('[SelectionTracker] selectionEnd:', element.selectionEnd);
-                    console.log('[SelectionTracker] element.id:', element.id);
-                    console.log('[SelectionTracker] element.name:', element.name);
-
-                    window.__savedSelection = {
-                        startOffset: element.selectionStart || 0,
-                        endOffset: element.selectionEnd || 0,
-                        elementTagName: element.tagName,
-                        elementId: element.id || null,
-                        elementName: element.name || null,
-                        elementPath: getElementPath(element)
-                    };
-                    console.log('[SelectionTracker] 💾 Selection SAVED:', JSON.stringify(window.__savedSelection));
-                    return;
-                }
-
-                // Handle contenteditable
-                if (element.isContentEditable) {
-                    console.log('[SelectionTracker] ✅ ContentEditable detected');
-                    const selection = window.getSelection();
-                    console.log('[SelectionTracker] selection:', selection);
-                    console.log('[SelectionTracker] rangeCount:', selection?.rangeCount);
-
-                    if (selection && selection.rangeCount > 0) {
-                        const range = selection.getRangeAt(0);
-                        console.log('[SelectionTracker] range.startOffset:', range.startOffset);
-                        console.log('[SelectionTracker] range.endOffset:', range.endOffset);
-
-                        window.__savedSelection = {
-                            startOffset: range.startOffset,
-                            endOffset: range.endOffset,
-                            elementTagName: element.tagName,
-                            elementId: element.id || null,
-                            elementName: element.name || null,
-                            elementPath: getElementPath(element)
-                        };
-                        console.log('[SelectionTracker] 💾 Selection SAVED:', JSON.stringify(window.__savedSelection));
-                    } else {
-                        console.log('[SelectionTracker] ⚠️ No selection range found');
+            // Simple save/restore functions
+            window.saveSelection = function() {
+                var sel = window.getSelection();
+                if (sel && sel.rangeCount > 0) {
+                    try {
+                        window.savedSelection = sel.getRangeAt(0).cloneRange();
+                        console.log('[SelectionTracker] 💾 Selection saved');
+                    } catch (e) {
+                        console.log('[SelectionTracker] ❌ Error saving selection:', e);
                     }
                 } else {
-                    console.log('[SelectionTracker] ℹ️ Element is not input/textarea/contenteditable');
-                }
-            }, true); // Use capture phase
-
-            console.log('[SelectionTracker] ✅ Blur listener registered');
-
-            function getElementPath(element) {
-                if (element.id) {
-                    return '#' + element.id;
-                }
-
-                let path = [];
-                while (element && element.nodeType === Node.ELEMENT_NODE) {
-                    let selector = element.nodeName.toLowerCase();
-                    if (element.className) {
-                        selector += '.' + element.className.trim().split(/\\s+/).join('.');
-                    }
-
-                    let sibling = element;
-                    let nth = 1;
-                    while (sibling.previousElementSibling) {
-                        sibling = sibling.previousElementSibling;
-                        if (sibling.nodeName.toLowerCase() === selector.split('.')[0]) {
-                            nth++;
-                        }
-                    }
-
-                    if (nth > 1) {
-                        selector += ':nth-of-type(' + nth + ')';
-                    }
-
-                    path.unshift(selector);
-                    element = element.parentElement;
-                }
-
-                return path.join(' > ');
-            }
-
-            // Add a test function
-            window.__testSelectionSave = function() {
-                console.log('[SelectionTracker] 🧪 Manual test triggered');
-                console.log('[SelectionTracker] activeElement:', document.activeElement);
-                console.log('[SelectionTracker] activeElement.tagName:', document.activeElement?.tagName);
-
-                const elem = document.activeElement;
-                if (elem && (elem.tagName === 'INPUT' || elem.tagName === 'TEXTAREA')) {
-                    console.log('[SelectionTracker] selectionStart:', elem.selectionStart);
-                    console.log('[SelectionTracker] selectionEnd:', elem.selectionEnd);
+                    console.log('[SelectionTracker] ℹ️ No selection to save');
                 }
             };
 
-            console.log('[SelectionTracker] 🎯 You can call window.__testSelectionSave() to test manually');
+            window.restoreSelection = function() {
+                if (window.savedSelection) {
+                    try {
+                        var sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(window.savedSelection);
+                        console.log('[SelectionTracker] ✅ Selection restored');
+                    } catch (e) {
+                        console.log('[SelectionTracker] ❌ Error restoring selection:', e);
+                    }
+                } else {
+                    console.log('[SelectionTracker] ℹ️ No saved selection to restore');
+                }
+            };
+
+            // Save selection on blur
+            document.addEventListener('blur', function(e) {
+                console.log('[SelectionTracker] 🔔 BLUR event fired');
+                window.saveSelection();
+            }, true);
+
+            console.log('[SelectionTracker] ✅ Blur listener registered');
         })();
     """
   }
@@ -214,180 +146,20 @@ class WebViewImpl: WKWebView, WKNavigationDelegate {
 
         self.evaluateJavaScript("""
                 (function() {
-                            console.log('[SelectionRestore] 🔄 Restore function called');
-                            console.log('[SelectionRestore] window.__savedSelection:', window.__savedSelection);
+                            console.log('[SelectionRestore] 🔄 Attempting restore');
 
                             // Try to restore saved selection
-                            if (window.__savedSelection) {
-                                console.log('[SelectionRestore] ✅ Saved selection found:', JSON.stringify(window.__savedSelection));
-                                const saved = window.__savedSelection;
-                                let element = null;
-
-                                // Try to find element by ID first
-                                if (saved.elementId) {
-                                    console.log('[SelectionRestore] 🔍 Searching by ID:', saved.elementId);
-                                    element = document.getElementById(saved.elementId);
-                                    console.log('[SelectionRestore] Found by ID?', !!element);
-                                }
-
-                                // Try by name
-                                if (!element && saved.elementName) {
-                                    console.log('[SelectionRestore] 🔍 Searching by name:', saved.elementName);
-                                    element = document.querySelector('[name="' + saved.elementName + '"]');
-                                    console.log('[SelectionRestore] Found by name?', !!element);
-                                }
-
-                                // Try by path
-                                if (!element && saved.elementPath) {
-                                    console.log('[SelectionRestore] 🔍 Searching by path:', saved.elementPath);
-                                    try {
-                                        element = document.querySelector(saved.elementPath);
-                                        console.log('[SelectionRestore] Found by path?', !!element);
-                                    } catch(e) {
-                                        console.log('[SelectionRestore] ❌ Error finding by path:', e);
-                                    }
-                                }
-
-                                if (element) {
-                                    console.log('[SelectionRestore] ✅ Element found:', element);
-                                    console.log('[SelectionRestore] Element tagName:', element.tagName);
-
-                                    element.focus();
-                                    console.log('[SelectionRestore] 🎯 Element focused');
-
-                                    // Restore selection for input/textarea
-                                    if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                                        console.log('[SelectionRestore] 📝 Restoring input/textarea selection');
-                                        console.log('[SelectionRestore] startOffset:', saved.startOffset);
-                                        console.log('[SelectionRestore] endOffset:', saved.endOffset);
-
-                                        try {
-                                            element.setSelectionRange(saved.startOffset, saved.endOffset);
-                                            console.log('[SelectionRestore] ✅ Selection restored for input/textarea');
-                                            delete window.__savedSelection;
-                                            console.log('[SelectionRestore] 🗑️ Saved selection cleared');
-                                            return;
-                                        } catch(e) {
-                                            console.log('[SelectionRestore] ❌ Error restoring input selection:', e);
-                                        }
-                                    }
-
-                                    // Restore selection for contenteditable
-                                    if (element.isContentEditable) {
-                                        console.log('[SelectionRestore] 📝 Restoring contenteditable selection');
-                                        try {
-                                            // Find all text nodes in the element
-                                            function getTextNodes(node) {
-                                                const textNodes = [];
-
-                                                function walk(n) {
-                                                    if (n.nodeType === Node.TEXT_NODE) {
-                                                        textNodes.push(n);
-                                                    } else {
-                                                        for (let child of n.childNodes) {
-                                                            walk(child);
-                                                        }
-                                                    }
-                                                }
-
-                                                walk(node);
-                                                return textNodes;
-                                            }
-
-                                            const textNodes = getTextNodes(element);
-                                            console.log('[SelectionRestore] Found text nodes:', textNodes.length);
-
-                                            if (textNodes.length === 0) {
-                                                console.log('[SelectionRestore] ⚠️ No text nodes found');
-                                                delete window.__savedSelection;
-                                                return;
-                                            }
-
-                                            // Calculate cumulative position to find correct text node
-                                            let startNode = null, endNode = null;
-                                            let startNodeOffset = 0, endNodeOffset = 0;
-                                            let cumulativeLength = 0;
-
-                                            for (let i = 0; i < textNodes.length; i++) {
-                                                const node = textNodes[i];
-                                                const nodeLength = node.textContent.length;
-
-                                                // Find start position
-                                                if (startNode === null && cumulativeLength + nodeLength >= saved.startOffset) {
-                                                    startNode = node;
-                                                    startNodeOffset = saved.startOffset - cumulativeLength;
-                                                    console.log('[SelectionRestore] Start node found at index', i, 'offset:', startNodeOffset);
-                                                }
-
-                                                // Find end position
-                                                if (endNode === null && cumulativeLength + nodeLength >= saved.endOffset) {
-                                                    endNode = node;
-                                                    endNodeOffset = saved.endOffset - cumulativeLength;
-                                                    console.log('[SelectionRestore] End node found at index', i, 'offset:', endNodeOffset);
-                                                }
-
-                                                if (startNode && endNode) break;
-
-                                                cumulativeLength += nodeLength;
-                                            }
-
-                                            // Fallback to last text node if not found
-                                            if (!startNode) {
-                                                startNode = textNodes[textNodes.length - 1];
-                                                startNodeOffset = startNode.textContent.length;
-                                            }
-                                            if (!endNode) {
-                                                endNode = textNodes[textNodes.length - 1];
-                                                endNodeOffset = endNode.textContent.length;
-                                            }
-
-                                            console.log('[SelectionRestore] Final start offset:', startNodeOffset);
-                                            console.log('[SelectionRestore] Final end offset:', endNodeOffset);
-
-                                            const range = document.createRange();
-                                            range.setStart(startNode, startNodeOffset);
-                                            range.setEnd(endNode, endNodeOffset);
-
-                                            const selection = window.getSelection();
-                                            selection.removeAllRanges();
-                                            selection.addRange(range);
-
-                                            console.log('[SelectionRestore] ✅ Selection restored for contenteditable');
-                                            delete window.__savedSelection;
-                                            console.log('[SelectionRestore] 🗑️ Saved selection cleared');
-                                            return;
-                                        } catch(e) {
-                                            console.log('[SelectionRestore] ❌ Error restoring contenteditable selection:', e);
-                                        }
-                                    }
-
-                                    // Clear saved selection even if restore failed
-                                    delete window.__savedSelection;
-                                    console.log('[SelectionRestore] 🗑️ Saved selection cleared (restore failed)');
-                                    return;
-                                } else {
-                                    console.log('[SelectionRestore] ❌ Could not find element to restore');
-                                }
+                            if (window.restoreSelection) {
+                                window.restoreSelection();
                             } else {
-                                console.log('[SelectionRestore] ℹ️ No saved selection found');
+                                console.log('[SelectionRestore] ⚠️ restoreSelection function not found');
                             }
 
-                            // No saved selection or restore failed - just focus
-                            console.log('[SelectionRestore] 🎯 Falling back to default focus');
-                            let focusable = document.activeElement;
-                            console.log('[SelectionRestore] Current activeElement:', focusable);
-
-                            if (!focusable || focusable === document.body) {
-                                focusable = document.querySelector('input, textarea, [contenteditable="true"]') || document.body;
-                                console.log('[SelectionRestore] Found focusable element:', focusable);
-                            }
-
-                            focusable.focus();
-                            console.log('[SelectionRestore] Element focused');
-
-                            if (focusable.setSelectionRange) {
-                                focusable.setSelectionRange(0, 0);
-                                console.log('[SelectionRestore] Cursor set to position 0');
+                            // If no saved selection, just focus the body
+                            if (!window.savedSelection) {
+                                console.log('[SelectionRestore] 🎯 No saved selection, focusing body');
+                                let focusable = document.querySelector('input, textarea, [contenteditable="true"]') || document.body;
+                                focusable.focus();
                             }
                         })();
             """, completionHandler: { result, error in
