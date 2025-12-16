@@ -4,7 +4,7 @@
 
 import WebKit
 
-class WebViewImpl: WKWebView {
+class WebViewImpl: WKWebView, WKNavigationDelegate {
   let api: PigeonApiProtocolWKWebView
   unowned let registrar: ProxyAPIRegistrar
 
@@ -19,6 +19,9 @@ class WebViewImpl: WKWebView {
     #if os(macOS)
         // Set drawsBackground to false for transparent background
         self.setValue(false, forKey: "drawsBackground")
+
+        // Set navigation delegate
+        self.navigationDelegate = self
 
         NotificationCenter.default.addObserver(
           self,
@@ -42,69 +45,245 @@ class WebViewImpl: WKWebView {
   }
 
   #if os(macOS)
+  private func setupSelectionTracking() {
+    // Add the user script that will auto-inject on new pages
+    let script = WKUserScript(
+      source: getSelectionTrackerScript(),
+      injectionTime: .atDocumentEnd, // Changed to End for better compatibility
+      forMainFrameOnly: false
+    )
+
+    configuration.userContentController.addUserScript(script)
+    print("[WebViewImpl] ✅ Selection tracking user script added to configuration")
+  }
+
+  private func injectSelectionTracker() {
+    // Manually inject for immediate effect on already-loaded pages
+    evaluateJavaScript(getSelectionTrackerScript(), completionHandler: { result, error in
+      if let error = error {
+        print("[WebViewImpl] ❌ Error injecting tracker: \(error)")
+      } else {
+        print("[WebViewImpl] ✅ Selection tracker injected successfully")
+      }
+    })
+  }
+
+  private func getSelectionTrackerScript() -> String {
+    return """
+    (function() {
+            // Prevent double injection
+            if (window.__selectionTrackerInjected) {
+                console.log('[SelectionTracker] ⚠️ Already injected, skipping');
+                return;
+            }
+            window.__selectionTrackerInjected = true;
+
+            console.log('[SelectionTracker] 🚀 Script injected and running');
+
+            // Save selection whenever any input loses focus
+            document.addEventListener('blur', function(e) {
+                console.log('[SelectionTracker] 🔔 BLUR event fired');
+                console.log('[SelectionTracker] target:', e.target);
+                console.log('[SelectionTracker] target.tagName:', e.target.tagName);
+
+                const element = e.target;
+
+                // Handle input/textarea
+                if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                    console.log('[SelectionTracker] ✅ Input/Textarea detected');
+                    console.log('[SelectionTracker] selectionStart:', element.selectionStart);
+                    console.log('[SelectionTracker] selectionEnd:', element.selectionEnd);
+                    console.log('[SelectionTracker] element.id:', element.id);
+                    console.log('[SelectionTracker] element.name:', element.name);
+
+                    window.__savedSelection = {
+                        startOffset: element.selectionStart || 0,
+                        endOffset: element.selectionEnd || 0,
+                        elementTagName: element.tagName,
+                        elementId: element.id || null,
+                        elementName: element.name || null,
+                        elementPath: getElementPath(element)
+                    };
+                    console.log('[SelectionTracker] 💾 Selection SAVED:', JSON.stringify(window.__savedSelection));
+                    return;
+                }
+
+                // Handle contenteditable
+                if (element.isContentEditable) {
+                    console.log('[SelectionTracker] ✅ ContentEditable detected');
+                    const selection = window.getSelection();
+                    console.log('[SelectionTracker] selection:', selection);
+                    console.log('[SelectionTracker] rangeCount:', selection?.rangeCount);
+
+                    if (selection && selection.rangeCount > 0) {
+                        const range = selection.getRangeAt(0);
+                        console.log('[SelectionTracker] range.startOffset:', range.startOffset);
+                        console.log('[SelectionTracker] range.endOffset:', range.endOffset);
+
+                        window.__savedSelection = {
+                            startOffset: range.startOffset,
+                            endOffset: range.endOffset,
+                            elementTagName: element.tagName,
+                            elementId: element.id || null,
+                            elementName: element.name || null,
+                            elementPath: getElementPath(element)
+                        };
+                        console.log('[SelectionTracker] 💾 Selection SAVED:', JSON.stringify(window.__savedSelection));
+                    } else {
+                        console.log('[SelectionTracker] ⚠️ No selection range found');
+                    }
+                } else {
+                    console.log('[SelectionTracker] ℹ️ Element is not input/textarea/contenteditable');
+                }
+            }, true); // Use capture phase
+
+            console.log('[SelectionTracker] ✅ Blur listener registered');
+
+            function getElementPath(element) {
+                if (element.id) {
+                    return '#' + element.id;
+                }
+
+                let path = [];
+                while (element && element.nodeType === Node.ELEMENT_NODE) {
+                    let selector = element.nodeName.toLowerCase();
+                    if (element.className) {
+                        selector += '.' + element.className.trim().split(/\\s+/).join('.');
+                    }
+
+                    let sibling = element;
+                    let nth = 1;
+                    while (sibling.previousElementSibling) {
+                        sibling = sibling.previousElementSibling;
+                        if (sibling.nodeName.toLowerCase() === selector.split('.')[0]) {
+                            nth++;
+                        }
+                    }
+
+                    if (nth > 1) {
+                        selector += ':nth-of-type(' + nth + ')';
+                    }
+
+                    path.unshift(selector);
+                    element = element.parentElement;
+                }
+
+                return path.join(' > ');
+            }
+
+            // Add a test function
+            window.__testSelectionSave = function() {
+                console.log('[SelectionTracker] 🧪 Manual test triggered');
+                console.log('[SelectionTracker] activeElement:', document.activeElement);
+                console.log('[SelectionTracker] activeElement.tagName:', document.activeElement?.tagName);
+
+                const elem = document.activeElement;
+                if (elem && (elem.tagName === 'INPUT' || elem.tagName === 'TEXTAREA')) {
+                    console.log('[SelectionTracker] selectionStart:', elem.selectionStart);
+                    console.log('[SelectionTracker] selectionEnd:', elem.selectionEnd);
+                }
+            };
+
+            console.log('[SelectionTracker] 🎯 You can call window.__testSelectionSave() to test manually');
+        })();
+    """
+  }
+
   @objc private func handleFocusWebView() {
-    guard let window = self.window else { return }
+    print("[WebViewImpl] 🔔 handleFocusWebView called")
+
+    guard let window = self.window else {
+      print("[WebViewImpl] ❌ window is nil")
+      return
+    }
 
     DispatchQueue.main.async { [weak self] in
       guard let self = self else { return }
 
+      print("[WebViewImpl] ▶️ DispatchQueue.main - making first responder")
       window.makeFirstResponder(self)
 
       // Force display update
       self.setNeedsDisplay(self.bounds)
       self.displayIfNeeded()
+      print("[WebViewImpl] 🎨 Display updated")
 
       // Small delay then restore selection
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        print("[WebViewImpl] ⏰ 0.05s delay passed - attempting restore")
+
         self.evaluateJavaScript("""
                 (function() {
+                            console.log('[SelectionRestore] 🔄 Restore function called');
+                            console.log('[SelectionRestore] window.__savedSelection:', window.__savedSelection);
+
                             // Try to restore saved selection
                             if (window.__savedSelection) {
+                                console.log('[SelectionRestore] ✅ Saved selection found:', JSON.stringify(window.__savedSelection));
                                 const saved = window.__savedSelection;
                                 let element = null;
 
                                 // Try to find element by ID first
                                 if (saved.elementId) {
+                                    console.log('[SelectionRestore] 🔍 Searching by ID:', saved.elementId);
                                     element = document.getElementById(saved.elementId);
+                                    console.log('[SelectionRestore] Found by ID?', !!element);
                                 }
 
                                 // Try by name
                                 if (!element && saved.elementName) {
+                                    console.log('[SelectionRestore] 🔍 Searching by name:', saved.elementName);
                                     element = document.querySelector('[name="' + saved.elementName + '"]');
+                                    console.log('[SelectionRestore] Found by name?', !!element);
                                 }
 
                                 // Try by path
                                 if (!element && saved.elementPath) {
+                                    console.log('[SelectionRestore] 🔍 Searching by path:', saved.elementPath);
                                     try {
                                         element = document.querySelector(saved.elementPath);
+                                        console.log('[SelectionRestore] Found by path?', !!element);
                                     } catch(e) {
-                                        console.log('Could not find element by path:', e);
+                                        console.log('[SelectionRestore] ❌ Error finding by path:', e);
                                     }
                                 }
 
                                 if (element) {
+                                    console.log('[SelectionRestore] ✅ Element found:', element);
+                                    console.log('[SelectionRestore] Element tagName:', element.tagName);
+
                                     element.focus();
+                                    console.log('[SelectionRestore] 🎯 Element focused');
 
                                     // Restore selection for input/textarea
                                     if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                                        console.log('[SelectionRestore] 📝 Restoring input/textarea selection');
+                                        console.log('[SelectionRestore] startOffset:', saved.startOffset);
+                                        console.log('[SelectionRestore] endOffset:', saved.endOffset);
+
                                         try {
                                             element.setSelectionRange(saved.startOffset, saved.endOffset);
-                                            console.log('Selection restored for input/textarea');
+                                            console.log('[SelectionRestore] ✅ Selection restored for input/textarea');
                                             delete window.__savedSelection;
+                                            console.log('[SelectionRestore] 🗑️ Saved selection cleared');
                                             return;
                                         } catch(e) {
-                                            console.log('Error restoring input selection:', e);
+                                            console.log('[SelectionRestore] ❌ Error restoring input selection:', e);
                                         }
                                     }
 
                                     // Restore selection for contenteditable
                                     if (element.isContentEditable) {
+                                        console.log('[SelectionRestore] 📝 Restoring contenteditable selection');
                                         try {
                                             const range = document.createRange();
                                             const textNode = element.firstChild || element;
 
                                             const start = Math.min(saved.startOffset, textNode.textContent?.length || 0);
                                             const end = Math.min(saved.endOffset, textNode.textContent?.length || 0);
+
+                                            console.log('[SelectionRestore] Adjusted start:', start);
+                                            console.log('[SelectionRestore] Adjusted end:', end);
 
                                             range.setStart(textNode, start);
                                             range.setEnd(textNode, end);
@@ -113,115 +292,66 @@ class WebViewImpl: WKWebView {
                                             selection.removeAllRanges();
                                             selection.addRange(range);
 
-                                            console.log('Selection restored for contenteditable');
+                                            console.log('[SelectionRestore] ✅ Selection restored for contenteditable');
                                             delete window.__savedSelection;
+                                            console.log('[SelectionRestore] 🗑️ Saved selection cleared');
                                             return;
                                         } catch(e) {
-                                            console.log('Error restoring contenteditable selection:', e);
+                                            console.log('[SelectionRestore] ❌ Error restoring contenteditable selection:', e);
                                         }
                                     }
 
                                     // Clear saved selection even if restore failed
                                     delete window.__savedSelection;
+                                    console.log('[SelectionRestore] 🗑️ Saved selection cleared (restore failed)');
                                     return;
+                                } else {
+                                    console.log('[SelectionRestore] ❌ Could not find element to restore');
                                 }
+                            } else {
+                                console.log('[SelectionRestore] ℹ️ No saved selection found');
                             }
 
                             // No saved selection or restore failed - just focus
+                            console.log('[SelectionRestore] 🎯 Falling back to default focus');
                             let focusable = document.activeElement;
+                            console.log('[SelectionRestore] Current activeElement:', focusable);
+
                             if (!focusable || focusable === document.body) {
                                 focusable = document.querySelector('input, textarea, [contenteditable="true"]') || document.body;
+                                console.log('[SelectionRestore] Found focusable element:', focusable);
                             }
+
                             focusable.focus();
+                            console.log('[SelectionRestore] Element focused');
 
                             if (focusable.setSelectionRange) {
                                 focusable.setSelectionRange(0, 0);
+                                console.log('[SelectionRestore] Cursor set to position 0');
                             }
                         })();
-            """, completionHandler: nil)
+            """, completionHandler: { result, error in
+          if let error = error {
+            print("[WebViewImpl] ❌ JS execution error: \(error)")
+          } else {
+            print("[WebViewImpl] ✅ JS executed successfully")
+          }
+        })
       }
     }
   }
 
-  private func setupSelectionTracking() {
-    // Inject script that tracks selection on blur
-    let script = WKUserScript(
-      source: """
-        (function() {
-                  // Save selection whenever any input loses focus
-                  document.addEventListener('blur', function(e) {
-                      const element = e.target;
+  // MARK: - WKNavigationDelegate
 
-                      // Handle input/textarea
-                      if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                          window.__savedSelection = {
-                              startOffset: element.selectionStart || 0,
-                              endOffset: element.selectionEnd || 0,
-                              elementTagName: element.tagName,
-                              elementId: element.id || null,
-                              elementName: element.name || null,
-                              elementPath: getElementPath(element)
-                          };
-                          console.log('Selection saved on blur:', window.__savedSelection);
-                          return;
-                      }
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    print("[WebViewImpl] 🌐 Page loaded - re-injecting selection tracker")
 
-                      // Handle contenteditable
-                      if (element.isContentEditable) {
-                          const selection = window.getSelection();
-                          if (selection && selection.rangeCount > 0) {
-                              const range = selection.getRangeAt(0);
-                              window.__savedSelection = {
-                                  startOffset: range.startOffset,
-                                  endOffset: range.endOffset,
-                                  elementTagName: element.tagName,
-                                  elementId: element.id || null,
-                                  elementName: element.name || null,
-                                  elementPath: getElementPath(element)
-                              };
-                              console.log('Selection saved on blur:', window.__savedSelection);
-                          }
-                      }
-                  }, true); // Use capture phase to catch it before blur completes
+    // Re-inject the selection tracking script after page load
+    injectSelectionTracker()
+  }
 
-                  function getElementPath(element) {
-                      if (element.id) {
-                          return '#' + element.id;
-                      }
-
-                      let path = [];
-                      while (element && element.nodeType === Node.ELEMENT_NODE) {
-                          let selector = element.nodeName.toLowerCase();
-                          if (element.className) {
-                              selector += '.' + element.className.trim().split(/\\s+/).join('.');
-                          }
-
-                          let sibling = element;
-                          let nth = 1;
-                          while (sibling.previousElementSibling) {
-                              sibling = sibling.previousElementSibling;
-                              if (sibling.nodeName.toLowerCase() === selector.split('.')[0]) {
-                                  nth++;
-                              }
-                          }
-
-                          if (nth > 1) {
-                              selector += ':nth-of-type(' + nth + ')';
-                          }
-
-                          path.unshift(selector);
-                          element = element.parentElement;
-                      }
-
-                      return path.join(' > ');
-                  }
-              })();
-        """,
-      injectionTime: .atDocumentStart,
-      forMainFrameOnly: false
-    )
-
-    configuration.userContentController.addUserScript(script)
+  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    print("[WebViewImpl] 🔄 Navigation committed")
   }
   #endif
 
