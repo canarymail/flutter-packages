@@ -149,17 +149,56 @@ class WebViewImpl: WKWebView, WKNavigationDelegate {
                             console.log('[SelectionRestore] 🔄 Attempting restore');
 
                             // Try to restore saved selection
-                            if (window.restoreSelection) {
+                            if (window.savedSelection && window.restoreSelection) {
+                                console.log('[SelectionRestore] ✅ Restoring saved selection');
                                 window.restoreSelection();
                             } else {
-                                console.log('[SelectionRestore] ⚠️ restoreSelection function not found');
-                            }
+                                console.log('[SelectionRestore] 🎯 No saved selection, focusing element');
 
-                            // If no saved selection, just focus the body
-                            if (!window.savedSelection) {
-                                console.log('[SelectionRestore] 🎯 No saved selection, focusing body');
-                                let focusable = document.querySelector('input, textarea, [contenteditable="true"]') || document.body;
+                                // Find and focus a focusable element
+                                let focusable = document.activeElement;
+
+                                if (!focusable || focusable === document.body || focusable === document.documentElement) {
+                                    focusable = document.querySelector('input, textarea, [contenteditable="true"]') || document.body;
+                                    console.log('[SelectionRestore] Found focusable element:', focusable.tagName);
+                                }
+
                                 focusable.focus();
+                                console.log('[SelectionRestore] Element focused');
+
+                                // Set cursor to beginning for input/textarea
+                                if (focusable.setSelectionRange) {
+                                    focusable.setSelectionRange(0, 0);
+                                    console.log('[SelectionRestore] Cursor set to position 0');
+                                }
+
+                                // For contenteditable, place cursor at start
+                                if (focusable.isContentEditable) {
+                                    try {
+                                        const range = document.createRange();
+                                        const sel = window.getSelection();
+
+                                        // Find first text node or use element itself
+                                        let node = focusable.firstChild;
+                                        while (node && node.nodeType !== Node.TEXT_NODE && node.firstChild) {
+                                            node = node.firstChild;
+                                        }
+
+                                        if (node && node.nodeType === Node.TEXT_NODE) {
+                                            range.setStart(node, 0);
+                                            range.collapse(true);
+                                        } else {
+                                            range.selectNodeContents(focusable);
+                                            range.collapse(true);
+                                        }
+
+                                        sel.removeAllRanges();
+                                        sel.addRange(range);
+                                        console.log('[SelectionRestore] Cursor placed in contenteditable');
+                                    } catch(e) {
+                                        console.log('[SelectionRestore] ❌ Error placing cursor:', e);
+                                    }
+                                }
                             }
                         })();
             """, completionHandler: { result, error in
