@@ -48,7 +48,7 @@ class WebViewImpl: WKWebView {
 
   #if os(macOS)
   @objc private func handleSaveSelection() {
-    evaluateJavaScript("""
+    evaluateJavaScript(#"""
       (function() {
               console.log('[Save] 🔔 Save selection called');
               var sel = window.getSelection();
@@ -64,7 +64,7 @@ class WebViewImpl: WKWebView {
               console.log('[Save] ⚠️ No selection to save');
               return false;
           })();
-  """) { _, _ in }
+  """#) { _, _ in }
   }
 
   @objc private func handleFocusWebView() {
@@ -82,7 +82,7 @@ class WebViewImpl: WKWebView {
 
       // 3. Small delay then focus via JS
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-        self.evaluateJavaScript("""
+        self.evaluateJavaScript(#"""
           (function() {
               console.log('[Restore] 🔔 Restore/Focus called');
 
@@ -109,7 +109,7 @@ class WebViewImpl: WKWebView {
 
               return true;
           })();
-              """) { _, _ in }
+              """#) { _, _ in }
       }
     }
   }
