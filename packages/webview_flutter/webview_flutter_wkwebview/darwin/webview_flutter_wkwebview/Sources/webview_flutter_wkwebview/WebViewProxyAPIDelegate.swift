@@ -50,19 +50,26 @@ class WebViewImpl: WKWebView {
   @objc private func handleSaveSelection() {
     evaluateJavaScript(#"""
 (function() {
-    console.log('[Save] 🔔 Save selection called');
     var sel = window.getSelection();
-    console.log('[Save] Selection:', sel);
-    console.log('[Save] Range count:', sel ? sel.rangeCount : 0);
+    if (!sel || sel.rangeCount === 0) return false;
 
-    if (sel && sel.rangeCount > 0) {
-      window.savedSelection = sel.getRangeAt(0).cloneRange();
-      console.log('[Save] ✅ Selection saved');
-      return true;
-    }
+    var range = sel.getRangeAt(0);
+    var container = range.startContainer;
 
-    console.log('[Save] ⚠️ No selection to save');
-    return false;
+    // Find the editable ancestor
+    var el =
+      container.nodeType === Node.ELEMENT_NODE
+        ? container
+        : container.parentElement;
+
+    el = el.closest('[contenteditable]');
+
+    window.savedSelection = {
+      range: range.cloneRange(),
+      element: el
+    };
+
+    return true;
   })();
 """#) { _, _ in }
   }
@@ -84,26 +91,18 @@ class WebViewImpl: WKWebView {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
         self.evaluateJavaScript(#"""
 (function() {
-    console.log('[Restore] 🔔 Restore/Focus called');
+    if (!window.savedSelection) return false;
 
-    var el =
-      document.querySelector('[contenteditable="true"]') ||
-      document.activeElement ||
-      document.body;
+    var el = window.savedSelection.element;
+    if (!el) return false;
 
-    console.log('[Restore] Focusing element:', el && el.tagName);
+    console.log('[Restore] Focusing saved editable:', el.tagName);
     el.focus();
 
     requestAnimationFrame(() => {
-      console.log('[Restore] Saved selection exists?', !!window.savedSelection);
-
-      if (window.savedSelection) {
-        console.log('[Restore] ✅ Restoring saved selection');
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(window.savedSelection);
-        console.log('[Restore] Selection restored');
-      }
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(window.savedSelection.range);
     });
 
     return true;
