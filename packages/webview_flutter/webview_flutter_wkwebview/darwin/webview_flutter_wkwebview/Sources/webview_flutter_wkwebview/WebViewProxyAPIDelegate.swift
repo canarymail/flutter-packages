@@ -50,25 +50,44 @@ class WebViewImpl: WKWebView {
   @objc private func handleSaveSelection() {
     evaluateJavaScript(#"""
 (function() {
+    console.log('[Save] 🔔 called');
+
     var sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return false;
+    console.log('[Save] sel exists?', !!sel);
+    console.log('[Save] rangeCount =', sel ? sel.rangeCount : 'n/a');
+
+    if (!sel || sel.rangeCount === 0) {
+      console.log('[Save] ❌ no range');
+      return false;
+    }
 
     var range = sel.getRangeAt(0);
-    var container = range.startContainer;
+    console.log('[Save] range startContainer:', range.startContainer);
+    console.log('[Save] startOffset:', range.startOffset);
+    console.log('[Save] endOffset:', range.endOffset);
 
-    // Find the editable ancestor
-    var el =
-      container.nodeType === Node.ELEMENT_NODE
-        ? container
-        : container.parentElement;
+    // Find editable ancestor
+    var node = range.startContainer;
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentElement;
+    }
 
-    el = el.closest('[contenteditable]');
+    var editable = node && node.closest('[contenteditable]');
+    console.log('[Save] editable found?', !!editable);
+    console.log('[Save] editable tag:', editable && editable.tagName);
+    console.log('[Save] editable contenteditable:', editable && editable.getAttribute('contenteditable'));
 
-    window.savedSelection = {
+    if (!editable) {
+      console.log('[Save] ❌ no editable ancestor');
+      return false;
+    }
+
+    window.__savedSelection = {
       range: range.cloneRange(),
-      element: el
+      editable: editable
     };
 
+    console.log('[Save] ✅ selection saved');
     return true;
   })();
 """#) { _, _ in }
@@ -91,18 +110,38 @@ class WebViewImpl: WKWebView {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
         self.evaluateJavaScript(#"""
 (function() {
-    if (!window.savedSelection) return false;
+    console.log('[Restore] 🔔 called');
 
-    var el = window.savedSelection.element;
-    if (!el) return false;
+    var saved = window.__savedSelection;
+    console.log('[Restore] saved exists?', !!saved);
 
-    console.log('[Restore] Focusing saved editable:', el.tagName);
-    el.focus();
+    if (!saved) {
+      console.log('[Restore] ❌ nothing saved');
+      return false;
+    }
 
+    console.log('[Restore] saved.editable:', saved.editable);
+    console.log('[Restore] editable still in DOM?', document.contains(saved.editable));
+
+    // STEP 1: focus the correct editable
+    saved.editable.focus();
+    console.log('[Restore] editable.focus() called');
+
+    // STEP 2: wait for WebKit caret reset
     requestAnimationFrame(() => {
       var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(window.savedSelection.range);
+      console.log('[Restore] selection after focus:', sel);
+      console.log('[Restore] rangeCount after focus:', sel.rangeCount);
+
+      try {
+        sel.removeAllRanges();
+        sel.addRange(saved.range);
+        console.log('[Restore] ✅ range added');
+      } catch (e) {
+        console.log('[Restore] ❌ addRange error:', e);
+      }
+
+      console.log('[Restore] final selection:', window.getSelection());
     });
 
     return true;
