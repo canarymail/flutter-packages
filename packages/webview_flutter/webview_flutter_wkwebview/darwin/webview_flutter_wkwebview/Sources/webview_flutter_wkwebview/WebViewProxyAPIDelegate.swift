@@ -49,22 +49,22 @@ class WebViewImpl: WKWebView {
   #if os(macOS)
   @objc private func handleSaveSelection() {
     evaluateJavaScript(#"""
-      (function() {
-              console.log('[Save] 🔔 Save selection called');
-              var sel = window.getSelection();
-              console.log('[Save] Selection:', sel);
-              console.log('[Save] Range count:', sel ? sel.rangeCount : 0);
+(function() {
+    console.log('[Save] 🔔 Save selection called');
+    var sel = window.getSelection();
+    console.log('[Save] Selection:', sel);
+    console.log('[Save] Range count:', sel ? sel.rangeCount : 0);
 
-              if (sel && sel.rangeCount > 0) {
-                  window.savedSelection = sel.getRangeAt(0).cloneRange();
-                  console.log('[Save] ✅ Selection saved');
-                  return true;
-              }
+    if (sel && sel.rangeCount > 0) {
+      window.savedSelection = sel.getRangeAt(0).cloneRange();
+      console.log('[Save] ✅ Selection saved');
+      return true;
+    }
 
-              console.log('[Save] ⚠️ No selection to save');
-              return false;
-          })();
-  """#) { _, _ in }
+    console.log('[Save] ⚠️ No selection to save');
+    return false;
+  })();
+"""#) { _, _ in }
   }
 
   @objc private func handleFocusWebView() {
@@ -83,33 +83,32 @@ class WebViewImpl: WKWebView {
       // 3. Small delay then focus via JS
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
         self.evaluateJavaScript(#"""
-          (function() {
-              console.log('[Restore] 🔔 Restore/Focus called');
+(function() {
+    console.log('[Restore] 🔔 Restore/Focus called');
 
-              var el =
-                document.querySelector('[contenteditable="true"]') ||
-                document.activeElement ||
-                document.body;
+    var el =
+      document.querySelector('[contenteditable="true"]') ||
+      document.activeElement ||
+      document.body;
 
-              console.log('[Restore] Focusing element:', el && el.tagName);
-              el.focus();
+    console.log('[Restore] Focusing element:', el && el.tagName);
+    el.focus();
 
-              // IMPORTANT: wait one frame so WebKit finishes caret placement
-              requestAnimationFrame(() => {
-                console.log('[Restore] Saved selection exists?', !!window.savedSelection);
+    requestAnimationFrame(() => {
+      console.log('[Restore] Saved selection exists?', !!window.savedSelection);
 
-                if (window.savedSelection) {
-                  console.log('[Restore] ✅ Restoring saved selection');
-                  var sel = window.getSelection();
-                  sel.removeAllRanges();
-                  sel.addRange(window.savedSelection);
-                  console.log('[Restore] Selection restored');
-                }
-              });
+      if (window.savedSelection) {
+        console.log('[Restore] ✅ Restoring saved selection');
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(window.savedSelection);
+        console.log('[Restore] Selection restored');
+      }
+    });
 
-              return true;
-          })();
-              """#) { _, _ in }
+    return true;
+  })();
+"""#) { _, _ in }
       }
     }
   }
