@@ -110,39 +110,26 @@ class WebViewImpl: WKWebView {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
         self.evaluateJavaScript(#"""
 (function() {
-    console.log('[Restore] 🔔 called');
-
     var saved = window.__savedSelection;
-    console.log('[Restore] saved exists?', !!saved);
 
     if (!saved) {
-      console.log('[Restore] ❌ nothing saved');
+      document.activeElement?.focus();
       return false;
     }
 
-    console.log('[Restore] saved.editable:', saved.editable);
-    console.log('[Restore] editable still in DOM?', document.contains(saved.editable));
-
     // STEP 1: focus the correct editable
     saved.editable.focus();
-    console.log('[Restore] editable.focus() called');
 
-    // STEP 2: wait for WebKit caret reset
-    requestAnimationFrame(() => {
-      var sel = window.getSelection();
-      console.log('[Restore] selection after focus:', sel);
-      console.log('[Restore] rangeCount after focus:', sel.rangeCount);
+    var sel = window.getSelection();
 
-      try {
-        sel.removeAllRanges();
-        sel.addRange(saved.range);
-        console.log('[Restore] ✅ range added');
-      } catch (e) {
-        console.log('[Restore] ❌ addRange error:', e);
-      }
+    try {
+      sel.removeAllRanges();
+      sel.addRange(saved.range);
+    } catch (e) {
+      console.log('[Restore] ❌ addRange error:', e);
+    }
 
-      console.log('[Restore] final selection:', window.getSelection());
-    });
+    console.log('[Restore] final selection:', window.getSelection());
 
     return true;
   })();
