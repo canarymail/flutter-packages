@@ -26,6 +26,13 @@ class WebViewImpl: WKWebView {
           name: Notification.Name("FocusWebView"),
           object: nil
         )
+
+        NotificationCenter.default.addObserver(
+          self,
+          selector: #selector(handleSaveSelection),
+          name: Notification.Name("SaveWebViewSelection"),
+          object: nil
+        )
     #endif
 
     #if os(iOS)
@@ -40,6 +47,19 @@ class WebViewImpl: WKWebView {
   }
 
   #if os(macOS)
+  @objc private func handleSaveSelection() {
+    evaluateJavaScript("""
+        (function() {
+                var sel = window.getSelection();
+                if (sel && sel.rangeCount > 0) {
+                    window.savedSelection = sel.getRangeAt(0).cloneRange();
+                    return true;
+                }
+                return false;
+            })();
+    """) { _, _ in }
+  }
+
   @objc private func handleFocusWebView() {
     guard let window = self.window else { return }
 
@@ -55,7 +75,19 @@ class WebViewImpl: WKWebView {
 
       // 3. Small delay then focus via JS
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-        self.evaluateJavaScript("document.activeElement?.focus();", completionHandler: nil)
+        self.evaluateJavaScript("""
+                (function() {
+                            if (window.savedSelection) {
+                                var sel = window.getSelection();
+                                sel.removeAllRanges();
+                                sel.addRange(window.savedSelection);
+                                return true;
+                            }
+                            var el = document.querySelector('[contenteditable="true"]') || document.body;
+                            el.focus();
+                            return false;
+                        })();
+            """) { _, _ in }
       }
     }
   }
