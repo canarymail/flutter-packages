@@ -125,6 +125,8 @@ class WebViewImpl: WKWebView {
     try {
       sel.removeAllRanges();
       sel.addRange(saved.range);
+      window.__savedSelection = null;
+      delete window.__savedSelection;
     } catch (e) {
       console.log('[Restore] ❌ addRange error:', e);
     }
