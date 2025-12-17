@@ -84,26 +84,32 @@ class WebViewImpl: WKWebView {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
         self.evaluateJavaScript("""
           (function() {
-                      console.log('[Restore] 🔔 Restore/Focus called');
-                      console.log('[Restore] Saved selection exists?', !!window.savedSelection);
+              console.log('[Restore] 🔔 Restore/Focus called');
 
-                      if (window.savedSelection) {
-                          console.log('[Restore] ✅ Restoring saved selection');
-                          var sel = window.getSelection();
-                          sel.removeAllRanges();
-                          sel.addRange(window.savedSelection);
-                          console.log('[Restore] Selection restored');
-                          return true;
-                      }
+              var el =
+                document.querySelector('[contenteditable="true"]') ||
+                document.activeElement ||
+                document.body;
 
-                      console.log('[Restore] ℹ️ No saved selection, just focusing');
-                      var el = document.querySelector('[contenteditable="true"]') || document.body;
-                      console.log('[Restore] Focusing element:', el.tagName);
-                      el.focus();
-                      console.log('[Restore] Element focused');
-                      return false;
-                  })();
-      """) { _, _ in }
+              console.log('[Restore] Focusing element:', el && el.tagName);
+              el.focus();
+
+              // IMPORTANT: wait one frame so WebKit finishes caret placement
+              requestAnimationFrame(() => {
+                console.log('[Restore] Saved selection exists?', !!window.savedSelection);
+
+                if (window.savedSelection) {
+                  console.log('[Restore] ✅ Restoring saved selection');
+                  var sel = window.getSelection();
+                  sel.removeAllRanges();
+                  sel.addRange(window.savedSelection);
+                  console.log('[Restore] Selection restored');
+                }
+              });
+
+              return true;
+          })();
+              """) { _, _ in }
       }
     }
   }
