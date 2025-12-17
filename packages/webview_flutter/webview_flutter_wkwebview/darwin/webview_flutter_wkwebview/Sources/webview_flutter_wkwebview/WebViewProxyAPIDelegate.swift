@@ -49,15 +49,22 @@ class WebViewImpl: WKWebView {
   #if os(macOS)
   @objc private func handleSaveSelection() {
     evaluateJavaScript("""
-        (function() {
-                var sel = window.getSelection();
-                if (sel && sel.rangeCount > 0) {
-                    window.savedSelection = sel.getRangeAt(0).cloneRange();
-                    return true;
-                }
-                return false;
-            })();
-    """) { _, _ in }
+      (function() {
+              console.log('[Save] 🔔 Save selection called');
+              var sel = window.getSelection();
+              console.log('[Save] Selection:', sel);
+              console.log('[Save] Range count:', sel ? sel.rangeCount : 0);
+
+              if (sel && sel.rangeCount > 0) {
+                  window.savedSelection = sel.getRangeAt(0).cloneRange();
+                  console.log('[Save] ✅ Selection saved');
+                  return true;
+              }
+
+              console.log('[Save] ⚠️ No selection to save');
+              return false;
+          })();
+  """) { _, _ in }
   }
 
   @objc private func handleFocusWebView() {
@@ -76,18 +83,27 @@ class WebViewImpl: WKWebView {
       // 3. Small delay then focus via JS
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
         self.evaluateJavaScript("""
-                (function() {
-                            if (window.savedSelection) {
-                                var sel = window.getSelection();
-                                sel.removeAllRanges();
-                                sel.addRange(window.savedSelection);
-                                return true;
-                            }
-                            var el = document.querySelector('[contenteditable="true"]') || document.body;
-                            el.focus();
-                            return false;
-                        })();
-            """) { _, _ in }
+          (function() {
+                      console.log('[Restore] 🔔 Restore/Focus called');
+                      console.log('[Restore] Saved selection exists?', !!window.savedSelection);
+
+                      if (window.savedSelection) {
+                          console.log('[Restore] ✅ Restoring saved selection');
+                          var sel = window.getSelection();
+                          sel.removeAllRanges();
+                          sel.addRange(window.savedSelection);
+                          console.log('[Restore] Selection restored');
+                          return true;
+                      }
+
+                      console.log('[Restore] ℹ️ No saved selection, just focusing');
+                      var el = document.querySelector('[contenteditable="true"]') || document.body;
+                      console.log('[Restore] Focusing element:', el.tagName);
+                      el.focus();
+                      console.log('[Restore] Element focused');
+                      return false;
+                  })();
+      """) { _, _ in }
       }
     }
   }
