@@ -139,6 +139,20 @@ class WebViewImpl: WKWebView {
       }
     }
   }
+  var shouldIgnoreCursor: Bool = true
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if shouldIgnoreCursor {
+      // Remove all tracking areas related to cursor
+      for trackingArea in self.trackingAreas {
+        if trackingArea.options.contains(.cursorUpdate) {
+          self.removeTrackingArea(trackingArea)
+        }
+      }
+    }
+  }
+
   #endif
 
   deinit {
