@@ -42,6 +42,11 @@ public class WebViewProxyApi extends PigeonApiWebView {
     WebViewPlatformView(@NonNull WebViewProxyApi api) {
       super(api.getPigeonRegistrar().getContext());
       this.api = api;
+      
+      // Force software rendering to prevent blurriness on tall content
+      // Hardware acceleration can cause blurry rendering when content exceeds GPU texture size limits
+      setLayerType(View.LAYER_TYPE_NONE, null);
+      
       currentWebViewClient = new WebViewClient();
       currentWebChromeClient = new WebChromeClientProxyApi.SecureWebChromeClient();
 
