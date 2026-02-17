@@ -1,3 +1,23 @@
+## 3.23.6
+
+* Fixes a crash if WebViewFlutterWKWebViewExternalAPI is passed the wrong registry.
+
+## 3.23.5
+
+* Removes internal native library Dart proxy.
+
+## 3.23.4
+
+* Replaces use of deprecated Color.value.
+
+## 3.23.3
+
+* Updates to Pigeon 26.
+
+## 3.23.2
+
+* Removes specialization of 'map' to fix a Swift warning.
+
 ## 3.23.1
 
 * Removes code for versions of iOS older than 13.0.

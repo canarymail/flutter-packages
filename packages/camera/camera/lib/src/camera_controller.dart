@@ -174,7 +174,7 @@ class CameraValue {
   }) {
     return CameraValue(
       isInitialized: isInitialized ?? this.isInitialized,
-      errorDescription: errorDescription,
+      errorDescription: errorDescription ?? this.errorDescription,
       previewSize: previewSize ?? this.previewSize,
       isRecordingVideo: isRecordingVideo ?? this.isRecordingVideo,
       isTakingPicture: isTakingPicture ?? this.isTakingPicture,
@@ -187,20 +187,17 @@ class CameraValue {
           exposurePointSupported ?? this.exposurePointSupported,
       focusPointSupported: focusPointSupported ?? this.focusPointSupported,
       deviceOrientation: deviceOrientation ?? this.deviceOrientation,
-      lockedCaptureOrientation:
-          lockedCaptureOrientation == null
-              ? this.lockedCaptureOrientation
-              : lockedCaptureOrientation.orNull,
-      recordingOrientation:
-          recordingOrientation == null
-              ? this.recordingOrientation
-              : recordingOrientation.orNull,
+      lockedCaptureOrientation: lockedCaptureOrientation == null
+          ? this.lockedCaptureOrientation
+          : lockedCaptureOrientation.orNull,
+      recordingOrientation: recordingOrientation == null
+          ? this.recordingOrientation
+          : recordingOrientation.orNull,
       isPreviewPaused: isPreviewPaused ?? this.isPreviewPaused,
       description: description ?? this.description,
-      previewPauseOrientation:
-          previewPauseOrientation == null
-              ? this.previewPauseOrientation
-              : previewPauseOrientation.orNull,
+      previewPauseOrientation: previewPauseOrientation == null
+          ? this.previewPauseOrientation
+          : previewPauseOrientation.orNull,
     );
   }
 
@@ -330,12 +327,11 @@ class CameraController extends ValueNotifier<CameraValue> {
       );
     }
 
-    final Completer<void> initializeCompleter = Completer<void>();
+    final initializeCompleter = Completer<void>();
     _initializeFuture = initializeCompleter.future;
 
     try {
-      final Completer<CameraInitializedEvent> initializeCompleter =
-          Completer<CameraInitializedEvent>();
+      final initializeCompleter = Completer<CameraInitializedEvent>();
 
       _deviceOrientationSubscription ??= CameraPlatform.instance
           .onDeviceOrientationChanged()
@@ -353,6 +349,14 @@ class CameraController extends ValueNotifier<CameraValue> {
           CameraInitializedEvent event,
         ) {
           initializeCompleter.complete(event);
+        }),
+      );
+
+      _unawaited(
+        CameraPlatform.instance.onCameraError(_cameraId).first.then((
+          CameraErrorEvent event,
+        ) {
+          value = value.copyWith(errorDescription: event.description);
         }),
       );
 
@@ -438,6 +442,10 @@ class CameraController extends ValueNotifier<CameraValue> {
   }
 
   /// Sets the description of the camera.
+  ///
+  /// On Android, you must start the recording with [startVideoRecording]
+  /// with `enablePersistentRecording` set to `true`
+  /// to avoid cancelling any active recording.
   ///
   /// Throws a [CameraException] if setting the description fails.
   Future<void> setDescription(CameraDescription description) async {
@@ -554,8 +562,15 @@ class CameraController extends ValueNotifier<CameraValue> {
   ///
   /// The video is returned as a [XFile] after calling [stopVideoRecording].
   /// Throws a [CameraException] if the capture fails.
+  ///
+  /// `enablePersistentRecording` parameter configures the recording to be a persistent recording.
+  /// A persistent recording can only be stopped by explicitly calling [stopVideoRecording]
+  /// and will ignore events that would normally cause recording to stop,
+  /// such as lifecycle events or explicit calls to [setDescription] while recording is in progress.
+  /// Currently a no-op on platforms other than Android.
   Future<void> startVideoRecording({
     onLatestImageAvailable? onAvailable,
+    bool enablePersistentRecording = true,
   }) async {
     _throwIfNotInitialized('startVideoRecording');
     if (value.isRecordingVideo) {
@@ -574,7 +589,11 @@ class CameraController extends ValueNotifier<CameraValue> {
 
     try {
       await CameraPlatform.instance.startVideoCapturing(
-        VideoCaptureOptions(_cameraId, streamCallback: streamCallback),
+        VideoCaptureOptions(
+          _cameraId,
+          streamCallback: streamCallback,
+          enablePersistentRecording: enablePersistentRecording,
+        ),
       );
       value = value.copyWith(
         isRecordingVideo: true,

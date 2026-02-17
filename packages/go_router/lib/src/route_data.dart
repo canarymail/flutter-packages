@@ -117,18 +117,14 @@ _GoRouteParameters _createGoRouteParameters<T extends _GoRouteDataBase>({
   }
 
   return _GoRouteParameters(
-    builder:
-        (BuildContext context, GoRouterState state) =>
-            factoryImpl(state).build(context, state),
-    pageBuilder:
-        (BuildContext context, GoRouterState state) =>
-            factoryImpl(state).buildPage(context, state),
-    redirect:
-        (BuildContext context, GoRouterState state) =>
-            factoryImpl(state).redirect(context, state),
-    onExit:
-        (BuildContext context, GoRouterState state) =>
-            factoryImpl(state).onExit(context, state),
+    builder: (BuildContext context, GoRouterState state) =>
+        factoryImpl(state).build(context, state),
+    pageBuilder: (BuildContext context, GoRouterState state) =>
+        factoryImpl(state).buildPage(context, state),
+    redirect: (BuildContext context, GoRouterState state) =>
+        factoryImpl(state).redirect(context, state),
+    onExit: (BuildContext context, GoRouterState state) =>
+        factoryImpl(state).onExit(context, state),
   );
 }
 
@@ -314,6 +310,7 @@ abstract class ShellRouteData extends RouteData {
     GlobalKey<NavigatorState>? navigatorKey,
     GlobalKey<NavigatorState>? parentNavigatorKey,
     List<RouteBase> routes = const <RouteBase>[],
+    bool notifyRootObserver = true,
     List<NavigatorObserver>? observers,
     String? restorationScopeId,
   }) {
@@ -342,6 +339,7 @@ abstract class ShellRouteData extends RouteData {
       parentNavigatorKey: parentNavigatorKey,
       routes: routes,
       navigatorKey: navigatorKey,
+      notifyRootObserver: notifyRootObserver,
       observers: observers,
       restorationScopeId: restorationScopeId,
       redirect: redirect,
@@ -380,10 +378,9 @@ abstract class StatefulShellRouteData extends RouteData {
     BuildContext context,
     GoRouterState state,
     StatefulNavigationShell navigationShell,
-  ) =>
-      throw UnimplementedError(
-        'One of `builder` or `pageBuilder` must be implemented.',
-      );
+  ) => throw UnimplementedError(
+    'One of `builder` or `pageBuilder` must be implemented.',
+  );
 
   /// A helper function used by generated code.
   ///
@@ -559,7 +556,16 @@ class TypedRelativeGoRoute<T extends RelativeGoRouteData>
 @Target(<TargetKind>{TargetKind.library, TargetKind.classType})
 class TypedShellRoute<T extends ShellRouteData> extends TypedRoute<T> {
   /// Default const constructor
-  const TypedShellRoute({this.routes = const <TypedRoute<RouteData>>[]});
+  const TypedShellRoute({
+    this.notifyRootObserver = true,
+    this.routes = const <TypedRoute<RouteData>>[],
+  });
+
+  /// Whether navigation changes within this shell route will notify the
+  /// GoRouter's observers.
+  ///
+  /// See [ShellRouteBase.notifyRootObserver].
+  final bool notifyRootObserver;
 
   /// Child route definitions.
   ///
@@ -573,8 +579,15 @@ class TypedStatefulShellRoute<T extends StatefulShellRouteData>
     extends TypedRoute<T> {
   /// Default const constructor
   const TypedStatefulShellRoute({
+    this.notifyRootObserver = true,
     this.branches = const <TypedStatefulShellBranch<StatefulShellBranchData>>[],
   });
+
+  /// Whether navigation changes within this shell route will notify the
+  /// GoRouter's observers.
+  ///
+  /// See [ShellRouteBase.notifyRootObserver].
+  final bool notifyRootObserver;
 
   /// Child route definitions.
   ///
@@ -605,4 +618,33 @@ class NoOpPage extends Page<void> {
   @override
   Route<void> createRoute(BuildContext context) =>
       throw UnsupportedError('Should never be called');
+}
+
+/// Annotation to override the URI name for a route parameter.
+@Target({TargetKind.parameter})
+class TypedQueryParameter {
+  /// Annotation to override the URI name for a route parameter.
+  const TypedQueryParameter({this.name});
+
+  /// The name of the parameter in the URI.
+  ///
+  /// If `null`, the kebab-case version of the parameter name will be used.
+  ///
+  /// For example:
+  /// ```dart
+  /// class MyRoute extends GoRouteData with $MyRoute {
+  ///   const MyRoute({
+  ///     @TypedQueryParameter(name: 'custom_name') this.myParameter,
+  ///   });
+  ///  final String myParameter;
+  /// }
+  /// ```
+  ///
+  /// This will result in a route that matches
+  /// `/my-route?custom_name=some_value` instead of the default
+  /// `/my-route?my-parameter=some_value`.
+  ///
+  /// It is escaped to be URL-safe. For example `'field with space'` will
+  /// generate a query parameter named `'field+with+space'`.
+  final String? name;
 }
