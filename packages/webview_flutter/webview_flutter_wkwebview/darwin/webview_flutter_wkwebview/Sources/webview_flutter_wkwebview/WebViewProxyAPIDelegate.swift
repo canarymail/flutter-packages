@@ -151,7 +151,13 @@ class WebViewImpl: WKWebView {
   @objc private func handleSetShouldIgnoreCursor(_ notification: Notification) {
     if let shouldIgnore = notification.object as? Bool {
       shouldIgnoreCursor = shouldIgnore
-      updateTrackingAreas()
+      if shouldIgnore {
+        updateTrackingAreas()
+      } else {
+        // Force WKWebView to recreate its native cursor tracking areas
+        // invalidateCursorRects triggers a full tracking area rebuild
+        self.window?.invalidateCursorRects(for: self)
+      }
     }
   }
 
