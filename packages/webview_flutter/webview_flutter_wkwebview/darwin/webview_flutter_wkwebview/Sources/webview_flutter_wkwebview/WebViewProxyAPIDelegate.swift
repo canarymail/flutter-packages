@@ -33,6 +33,13 @@ class WebViewImpl: WKWebView {
           name: Notification.Name("SaveWebViewSelection"),
           object: nil
         )
+
+        NotificationCenter.default.addObserver(
+          self,
+          selector: #selector(handleSetShouldIgnoreCursor(_:)),
+          name: Notification.Name("SetShouldIgnoreCursor"),
+          object: nil
+        )
     #endif
 
     #if os(iOS)
@@ -139,7 +146,14 @@ class WebViewImpl: WKWebView {
       }
     }
   }
-  var shouldIgnoreCursor: Bool = true
+  var shouldIgnoreCursor: Bool = false
+
+  @objc private func handleSetShouldIgnoreCursor(_ notification: Notification) {
+    if let shouldIgnore = notification.object as? Bool {
+      shouldIgnoreCursor = shouldIgnore
+      updateTrackingAreas()
+    }
+  }
 
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
