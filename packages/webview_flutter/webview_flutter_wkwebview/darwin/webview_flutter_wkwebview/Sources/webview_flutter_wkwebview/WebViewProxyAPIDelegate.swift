@@ -115,32 +115,36 @@ class WebViewImpl: WKWebView {
 
       // 3. Small delay then focus via JS
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        // Re-assert first responder — Flutter's unfocus of the subject field is processed
+        // asynchronously and can steal focus back between makeFirstResponder and here.
+        if window.firstResponder !== self {
+          window.makeFirstResponder(self)
+        }
         self.evaluateJavaScript(#"""
 (function() {
     var saved = window.__savedSelection;
+    var editable = (saved && saved.editable)
+        || document.getElementById('CanaryContent')
+        || document.querySelector('[contenteditable="true"]')
+        || document.body;
+    editable.focus();
 
     if (!saved) {
-      document.activeElement?.focus();
-      return false;
+      if (window.savedSelection) {
+        try {
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(window.savedSelection.cloneRange());
+        } catch (e) {}
+      }
+      return;
     }
 
-    // STEP 1: focus the correct editable
-    saved.editable.focus();
-
     var sel = window.getSelection();
-
     try {
       sel.removeAllRanges();
       sel.addRange(saved.range);
-      window.__savedSelection = null;
-      delete window.__savedSelection;
-    } catch (e) {
-      console.log('[Restore] ❌ addRange error:', e);
-    }
-
-    console.log('[Restore] final selection:', window.getSelection());
-
-    return true;
+    } catch (e) {}
   })();
 """#) { _, _ in }
       }
