@@ -559,6 +559,36 @@ class WebViewProxyAPIDelegate: PigeonApiDelegateWKWebView, PigeonApiDelegateUIVi
 
 #if os(iOS)
 extension WebViewImpl: UIScrollViewDelegate {
-  // Add any UIScrollViewDelegate methods you need here
+  // The scroll view is disabled at rest: the Flutter host sizes the webview
+  // fit-to-content and the surrounding Flutter scrollable moves it. While the
+  // user is pinch-zoomed in, though, the zoomed page can only be panned by the
+  // scroll view itself, so scrolling is enabled for exactly the duration of
+  // the zoom. Pinch-zooming is not gated by isScrollEnabled, so the gesture
+  // that enters and leaves the zoomed state always works. minimumZoomScale is
+  // the at-rest scale WebKit derives from the viewport meta (1 for
+  // width=device-width pages, the shrink-to-fit scale for wide content).
+  private func updateScrollEnabledForZoom(_ scrollView: UIScrollView, scale: CGFloat) {
+    let zoomed = scale > scrollView.minimumZoomScale * 1.01
+    if scrollView.isScrollEnabled != zoomed {
+      scrollView.isScrollEnabled = zoomed
+    }
+  }
+
+  func scrollViewDidZoom(_ scrollView: UIScrollView) {
+    updateScrollEnabledForZoom(scrollView, scale: scrollView.zoomScale)
+  }
+
+  func scrollViewDidEndZooming(
+    _ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat
+  ) {
+    updateScrollEnabledForZoom(scrollView, scale: scale)
+    // Zooming has fully settled — tell the page so it reports the final zoom
+    // state to Flutter. DOM touch bookkeeping alone is unreliable here: when
+    // the scroll view consumes the pinch, WebKit may never deliver the final
+    // touchend/touchcancel to the page.
+    evaluateJavaScript(
+      "window.__doveZoomGestureEnded && window.__doveZoomGestureEnded()",
+      completionHandler: nil)
+  }
 }
 #endif
