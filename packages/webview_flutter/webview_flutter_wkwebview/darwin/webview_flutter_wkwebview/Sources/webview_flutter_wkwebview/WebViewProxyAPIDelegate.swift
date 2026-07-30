@@ -22,13 +22,6 @@ class WebViewImpl: WKWebView {
 
         NotificationCenter.default.addObserver(
           self,
-          selector: #selector(handleFocusWebView),
-          name: Notification.Name("FocusWebView"),
-          object: nil
-        )
-
-        NotificationCenter.default.addObserver(
-          self,
           selector: #selector(handleSaveSelection),
           name: Notification.Name("SaveWebViewSelection"),
           object: nil
@@ -100,56 +93,6 @@ class WebViewImpl: WKWebView {
 """#) { _, _ in }
   }
 
-  @objc private func handleFocusWebView() {
-    guard let window = self.window else { return }
-
-    DispatchQueue.main.async { [weak self] in
-      guard let self = self else { return }
-
-      // 1. Make first responder
-      window.makeFirstResponder(self)
-
-      // 2. Force display update
-      self.setNeedsDisplay(self.bounds)
-      self.displayIfNeeded()
-
-      // 3. Small delay then focus via JS
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-        // Re-assert first responder — Flutter's unfocus of the subject field is processed
-        // asynchronously and can steal focus back between makeFirstResponder and here.
-        if window.firstResponder !== self {
-          window.makeFirstResponder(self)
-        }
-        self.evaluateJavaScript(#"""
-(function() {
-    var saved = window.__savedSelection;
-    var editable = (saved && saved.editable)
-        || document.getElementById('CanaryContent')
-        || document.querySelector('[contenteditable="true"]')
-        || document.body;
-    editable.focus();
-
-    if (!saved) {
-      if (window.savedSelection) {
-        try {
-          var sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(window.savedSelection.cloneRange());
-        } catch (e) {}
-      }
-      return;
-    }
-
-    var sel = window.getSelection();
-    try {
-      sel.removeAllRanges();
-      sel.addRange(saved.range);
-    } catch (e) {}
-  })();
-"""#) { _, _ in }
-      }
-    }
-  }
   var shouldIgnoreCursor: Bool = false
 
   @objc private func handleSetShouldIgnoreCursor(_ notification: Notification) {
