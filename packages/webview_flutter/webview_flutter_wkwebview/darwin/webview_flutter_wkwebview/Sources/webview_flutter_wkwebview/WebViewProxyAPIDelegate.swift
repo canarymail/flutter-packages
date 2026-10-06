@@ -151,6 +151,11 @@ class WebViewImpl: WKWebView {
     }
   }
   var shouldIgnoreCursor: Bool = false
+  // Cursor tracking areas removed while `shouldIgnoreCursor` is set. WebKit
+  // creates its primary tracking area once and never rebuilds it, so a
+  // removed area must be re-added by hand or link hover / cursor updates stay
+  // dead for the lifetime of this web view.
+  private var suppressedTrackingAreas: [NSTrackingArea] = []
 
   @objc private func handleSetShouldIgnoreCursor(_ notification: Notification) {
     if let shouldIgnore = notification.object as? Bool {
@@ -158,8 +163,11 @@ class WebViewImpl: WKWebView {
       if shouldIgnore {
         updateTrackingAreas()
       } else {
-        // Force WKWebView to recreate its native cursor tracking areas
-        // invalidateCursorRects triggers a full tracking area rebuild
+        for trackingArea in suppressedTrackingAreas
+        where !self.trackingAreas.contains(trackingArea) {
+          self.addTrackingArea(trackingArea)
+        }
+        suppressedTrackingAreas.removeAll()
         self.window?.invalidateCursorRects(for: self)
       }
     }
@@ -168,9 +176,10 @@ class WebViewImpl: WKWebView {
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if shouldIgnoreCursor {
-      // Remove all tracking areas related to cursor
+      // Remove all tracking areas related to cursor, keeping them to restore
       for trackingArea in self.trackingAreas {
         if trackingArea.options.contains(.cursorUpdate) {
+          suppressedTrackingAreas.append(trackingArea)
           self.removeTrackingArea(trackingArea)
         }
       }
