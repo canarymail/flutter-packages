@@ -7,6 +7,7 @@ package io.flutter.plugins.webviewflutter;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,5 +24,16 @@ public class JavaScriptChannelTest {
     instance.postMessage(message);
 
     verify(mockApi).postMessage(eq(instance), eq(message), any());
+  }
+
+  @Test
+  public void postMessageDropsNull() {
+    final JavaScriptChannelProxyApi mockApi = mock(JavaScriptChannelProxyApi.class);
+    when(mockApi.getPigeonRegistrar()).thenReturn(new TestProxyApiRegistrar());
+
+    final JavaScriptChannel instance = new JavaScriptChannel("channel", mockApi);
+    instance.postMessage(null);
+
+    verify(mockApi, never()).postMessage(any(), any(), any());
   }
 }

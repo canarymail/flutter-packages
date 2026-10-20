@@ -6,6 +6,7 @@ package io.flutter.plugins.webviewflutter;
 
 import android.webkit.JavascriptInterface;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
  * Added as a JavaScript interface to the WebView for any JavaScript channel that the Dart code sets
@@ -27,7 +28,14 @@ public class JavaScriptChannel {
   // Suppressing unused warning as this is invoked from JavaScript.
   @SuppressWarnings("unused")
   @JavascriptInterface
-  public void postMessage(@NonNull final String message) {
+  public void postMessage(@Nullable final String message) {
+    // JavaScript hands null for postMessage(), postMessage(undefined) and
+    // postMessage(null). The Pigeon API takes a non-null String, so forwarding
+    // it throws a NullPointerException on the main thread and kills the app.
+    // Any script on the page can make that call, so drop it here.
+    if (message == null) {
+      return;
+    }
     api.getPigeonRegistrar()
         .runOnMainThread(
             () -> {
