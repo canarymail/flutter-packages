@@ -29,10 +29,12 @@ public class JavaScriptChannel {
   @SuppressWarnings("unused")
   @JavascriptInterface
   public void postMessage(@Nullable final String message) {
-    // JavaScript hands null for postMessage(), postMessage(undefined) and
-    // postMessage(null). The Pigeon API takes a non-null String, so forwarding
-    // it throws a NullPointerException on the main thread and kills the app.
-    // Any script on the page can make that call, so drop it here.
+    // postMessage(null) in JavaScript, or a variable holding null, arrives here
+    // as null. (The bridge turns undefined into the string "undefined", and a
+    // call with no argument never reaches Java.) The Pigeon API takes a
+    // non-null String, so forwarding null throws a NullPointerException on the
+    // main thread and kills the app. Any script on the page can make that
+    // call, so drop it here.
     if (message == null) {
       return;
     }
