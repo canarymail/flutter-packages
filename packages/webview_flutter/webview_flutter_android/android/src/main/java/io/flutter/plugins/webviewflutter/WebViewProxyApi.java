@@ -10,6 +10,8 @@ import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.view.View;
 import android.view.ViewParent;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
 import android.webkit.DownloadListener;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -17,6 +19,9 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.inputmethod.EditorInfoCompat;
+import androidx.core.view.inputmethod.InputConnectionCompat;
 import io.flutter.embedding.android.FlutterView;
 import io.flutter.plugin.platform.PlatformView;
 import java.util.Map;
@@ -53,6 +58,21 @@ public class WebViewProxyApi extends PigeonApiWebView {
     @Override
     public View getView() {
       return this;
+    }
+
+    // Content the app accepts through ViewCompat.setOnReceiveContentListener
+    // (images from a keyboard's clipboard, stickers): a WebView advertises
+    // none of it to the keyboard, which then refuses to insert it.
+    @Nullable
+    @Override
+    public InputConnection onCreateInputConnection(@NonNull EditorInfo outAttrs) {
+      final InputConnection connection = super.onCreateInputConnection(outAttrs);
+      final String[] mimeTypes = ViewCompat.getOnReceiveContentMimeTypes(this);
+      if (connection == null || mimeTypes == null) {
+        return connection;
+      }
+      EditorInfoCompat.setContentMimeTypes(outAttrs, mimeTypes);
+      return InputConnectionCompat.createWrapper(this, connection, outAttrs);
     }
 
     @Override
